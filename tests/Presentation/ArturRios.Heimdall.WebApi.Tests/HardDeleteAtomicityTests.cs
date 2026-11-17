@@ -41,11 +41,15 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
         {
             seed.PasswordResetTokens.Add(new PasswordResetToken
             {
-                PersonId = person.Id, TokenHash = $"reset-{Guid.NewGuid():N}", ExpiresAt = DateTime.UtcNow.AddHours(1)
+                PersonId = person.Id,
+                TokenHash = $"reset-{Guid.NewGuid():N}",
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
             });
             seed.EmailVerificationTokens.Add(new EmailVerificationToken
             {
-                PersonId = person.Id, TokenHash = $"verify-{Guid.NewGuid():N}", ExpiresAt = DateTime.UtcNow.AddHours(1)
+                PersonId = person.Id,
+                TokenHash = $"verify-{Guid.NewGuid():N}",
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
             });
             await seed.SaveChangesAsync();
         }
@@ -164,7 +168,10 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
         await using var context = db.CreateContext();
         var application = new Application
         {
-            PublicId = Guid.NewGuid(), Name = $"app-{Guid.NewGuid():N}", ScopeId = scope.Id, OwnerId = owner.Id
+            PublicId = Guid.NewGuid(),
+            Name = $"app-{Guid.NewGuid():N}",
+            ScopeId = scope.Id,
+            OwnerId = owner.Id
         };
         context.Applications.Add(application);
         await context.SaveChangesAsync();

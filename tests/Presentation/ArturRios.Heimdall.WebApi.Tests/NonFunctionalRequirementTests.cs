@@ -188,13 +188,22 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
 
         var owner = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Owner", Email = UniqueEmail("nfr-owner"),
-            PasswordHash = [1], Salt = [1], RoleId = (long)Roles.ScopeAdmin
+            PublicId = Guid.NewGuid(),
+            Name = "Owner",
+            Email = UniqueEmail("nfr-owner"),
+            PasswordHash = [1],
+            Salt = [1],
+            RoleId = (long)Roles.ScopeAdmin
         };
         var member = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Member", Email = UniqueEmail("nfr-member"),
-            PasswordHash = [1], Salt = [1], RoleId = (long)Roles.User, ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            Name = "Member",
+            Email = UniqueEmail("nfr-member"),
+            PasswordHash = [1],
+            Salt = [1],
+            RoleId = (long)Roles.User,
+            ScopeId = scope.Id
         };
         context.Persons.AddRange(owner, member);
         await context.SaveChangesAsync();
@@ -203,16 +212,24 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
         context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = member.Id });
         context.Applications.Add(new Application
         {
-            PublicId = Guid.NewGuid(), Name = "App", ScopeId = scope.Id, OwnerId = owner.Id
+            PublicId = Guid.NewGuid(),
+            Name = "App",
+            ScopeId = scope.Id,
+            OwnerId = owner.Id
         });
         context.GoogleUsers.Add(new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = $"g-{Guid.NewGuid():N}",
-            Name = "Google", Email = UniqueEmail("nfr-google"), ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            GoogleId = $"g-{Guid.NewGuid():N}",
+            Name = "Google",
+            Email = UniqueEmail("nfr-google"),
+            ScopeId = scope.Id
         });
         context.ScopePermissions.Add(new ScopePermission
         {
-            PublicId = Guid.NewGuid(), Name = $"perm-{Guid.NewGuid():N}", ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            Name = $"perm-{Guid.NewGuid():N}",
+            ScopeId = scope.Id
         });
         await context.SaveChangesAsync();
 
@@ -228,7 +245,9 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
 
         context.TwoFactorAuths.Add(new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, EmailEnabled = true
+            PersonId = person.Id,
+            IsActive = true,
+            EmailEnabled = true
         });
         await context.SaveChangesAsync();
 

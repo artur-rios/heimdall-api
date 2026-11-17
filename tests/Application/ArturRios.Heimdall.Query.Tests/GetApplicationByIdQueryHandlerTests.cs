@@ -57,13 +57,13 @@ public class GetApplicationByIdQueryHandlerTests
     private static GetApplicationByIdQuery QueryFor(
         Scope scope, Application application, int actingRole, Guid actingPersonId,
         bool includeDeleted = false) => new()
-    {
-        ScopeId = scope.PublicId,
-        Id = application.PublicId,
-        IncludeDeleted = includeDeleted,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scope.PublicId,
+            Id = application.PublicId,
+            IncludeDeleted = includeDeleted,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingGetApplicationById_ThenApplicationIsReturned()

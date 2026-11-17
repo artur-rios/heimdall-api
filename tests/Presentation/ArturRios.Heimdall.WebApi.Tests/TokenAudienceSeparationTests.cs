@@ -43,7 +43,10 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true,
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = false,
+            EmailEnabled = true,
             ChallengeId = TestTokens.SeededChallengeId
         };
 
@@ -185,7 +188,8 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
         var crafted = TestTokens.WithAudience(
             new IdentityUser(person.PublicId, (int)Roles.SystemAdmin)
             {
-                MfaPending = true, ChallengeId = TestTokens.SeededChallengeId
+                MfaPending = true,
+                ChallengeId = TestTokens.SeededChallengeId
             },
             TestTokens.Audiences.Person);
 

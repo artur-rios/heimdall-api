@@ -1,5 +1,5 @@
-using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Shared.Security;
 
 namespace ArturRios.Heimdall.WebApi.Email;
 

@@ -1,11 +1,11 @@
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using ArturRios.Heimdall.Data.Configuration;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 

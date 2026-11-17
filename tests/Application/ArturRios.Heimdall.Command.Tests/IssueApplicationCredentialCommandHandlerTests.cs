@@ -40,14 +40,23 @@ public class IssueApplicationCredentialCommandHandlerTests
         var scope = new Scope { Id = 1, PublicId = Guid.NewGuid(), Name = "Acme" };
         var owner = new Person
         {
-            Id = 1, PublicId = Guid.NewGuid(), Name = "Owner", Email = "owner@test.local",
+            Id = 1,
+            PublicId = Guid.NewGuid(),
+            Name = "Owner",
+            Email = "owner@test.local",
             RoleId = (long)Roles.ScopeAdmin,
             ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id, Scope = scope }]
         };
         var application = new Application
         {
-            Id = 10, PublicId = Guid.NewGuid(), Name = "Billing Service", IsDeleted = isDeleted,
-            ScopeId = scope.Id, Scope = scope, OwnerId = owner.Id, Owner = owner
+            Id = 10,
+            PublicId = Guid.NewGuid(),
+            Name = "Billing Service",
+            IsDeleted = isDeleted,
+            ScopeId = scope.Id,
+            Scope = scope,
+            OwnerId = owner.Id,
+            Owner = owner
         };
         await _applications.CreateAsync(application);
         return (application, owner);
@@ -55,13 +64,13 @@ public class IssueApplicationCredentialCommandHandlerTests
 
     private static IssueApplicationCredentialCommand Command(
         Application application, int role, Guid actor, DateTime? expiresAt = null) => new()
-    {
-        ScopeId = application.Scope.PublicId,
-        Id = application.PublicId,
-        ExpiresAt = expiresAt,
-        ActingRole = role,
-        ActingPersonId = actor
-    };
+        {
+            ScopeId = application.Scope.PublicId,
+            Id = application.PublicId,
+            ExpiresAt = expiresAt,
+            ActingRole = role,
+            ActingPersonId = actor
+        };
 
     [UnitFact]
     public async Task GivenASystemAdmin_WhenIssuing_ThenASecretIsReturnedAndOnlyItsHashIsStored()
@@ -176,11 +185,17 @@ public class IssueApplicationCredentialCommandHandlerTests
         await _credentials.CreateAsync(new ApplicationCredential { Id = 1, ApplicationId = application.Id, SecretHash = "a" });
         await _credentials.CreateAsync(new ApplicationCredential
         {
-            Id = 2, ApplicationId = application.Id, SecretHash = "b", RevokedAt = DateTime.UtcNow.AddDays(-1)
+            Id = 2,
+            ApplicationId = application.Id,
+            SecretHash = "b",
+            RevokedAt = DateTime.UtcNow.AddDays(-1)
         });
         await _credentials.CreateAsync(new ApplicationCredential
         {
-            Id = 3, ApplicationId = application.Id, SecretHash = "c", ExpiresAt = DateTime.UtcNow.AddDays(-1)
+            Id = 3,
+            ApplicationId = application.Id,
+            SecretHash = "c",
+            ExpiresAt = DateTime.UtcNow.AddDays(-1)
         });
 
         // When

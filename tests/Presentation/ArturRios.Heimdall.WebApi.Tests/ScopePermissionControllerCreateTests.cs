@@ -21,11 +21,11 @@ public class ScopePermissionControllerCreateTests(PostgresFixture db) : WebApiTe
 {
     private static CreateScopePermissionCommand Command(
         string? name = null, string? description = null, bool includeAsJwtClaim = false) => new()
-    {
-        Name = name ?? $"perm-{Guid.NewGuid():N}",
-        Description = description,
-        IncludeAsJwtClaim = includeAsJwtClaim
-    };
+        {
+            Name = name ?? $"perm-{Guid.NewGuid():N}",
+            Description = description,
+            IncludeAsJwtClaim = includeAsJwtClaim
+        };
 
     private static string Route(Guid scopeId) => $"/api/scopes/{scopeId}/permissions";
 

@@ -1,7 +1,7 @@
-using ArturRios.Data.Relational.Core.Repositories;
-using ArturRios.Heimdall.Command.Handlers;
 using System.Security.Cryptography;
 using System.Text;
+using ArturRios.Data.Relational.Core.Repositories;
+using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Command.Tests.Support;
@@ -57,7 +57,8 @@ public class UpdatePersonCommandHandlerTests
         Salt = s_credential.Value.Salt,
         RoleId = (long)Roles.User,
         EmailVerified = true,
-        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id,
+        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person ScopeAdmin(long id, string email = "admin@test.local", params Scope[] owned) => new()
@@ -157,7 +158,10 @@ public class UpdatePersonCommandHandlerTests
         {
             var configuration = new TwoFactorAuth
             {
-                PersonId = person.Id, IsActive = true, AppEnabled = true, TotpSecretEncrypted = [1, 2, 3]
+                PersonId = person.Id,
+                IsActive = true,
+                AppEnabled = true,
+                TotpSecretEncrypted = [1, 2, 3]
             };
             await Configurations.CreateAsync(configuration);
 
@@ -375,7 +379,9 @@ public class UpdatePersonCommandHandlerTests
         var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         await tokens.CreateAsync(new EmailVerificationToken
         {
-            PersonId = target.Id, TokenHash = "old-address", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "old-address",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         var handler = HandlerFor(persons, verificationTokens: tokens);
         var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
@@ -399,7 +405,9 @@ public class UpdatePersonCommandHandlerTests
         var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         await tokens.CreateAsync(new EmailVerificationToken
         {
-            PersonId = target.Id, TokenHash = "same-address", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "same-address",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         var handler = HandlerFor(persons, verificationTokens: tokens);
         var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
@@ -436,15 +444,21 @@ public class UpdatePersonCommandHandlerTests
         var persons = await PersonsWith(target);
         var live = new PasswordResetToken
         {
-            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "live",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var expired = new PasswordResetToken
         {
-            PersonId = target.Id, TokenHash = "expired", ExpiresAt = DateTime.UtcNow.AddMinutes(-1)
+            PersonId = target.Id,
+            TokenHash = "expired",
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1)
         };
         var someoneElses = new PasswordResetToken
         {
-            PersonId = target.Id + 1, TokenHash = "other", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id + 1,
+            TokenHash = "other",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var resetTokens = await ResetTokensAsync(live, expired, someoneElses);
         var handler = HandlerFor(persons, resetTokens: resetTokens);
@@ -469,7 +483,9 @@ public class UpdatePersonCommandHandlerTests
         var persons = await PersonsWith(target);
         var live = new PasswordResetToken
         {
-            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "live",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var handler = HandlerFor(persons, resetTokens: await ResetTokensAsync(live));
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
@@ -491,7 +507,9 @@ public class UpdatePersonCommandHandlerTests
         var persons = await PersonsWith(target);
         var live = new PasswordResetToken
         {
-            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "live",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var handler = HandlerFor(persons, resetTokens: await ResetTokensAsync(live));
         var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
@@ -513,7 +531,9 @@ public class UpdatePersonCommandHandlerTests
         var persons = await PersonsWith(target);
         var live = new PasswordResetToken
         {
-            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "live",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var handler = HandlerFor(persons, resetTokens: await ResetTokensAsync(live));
         var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
@@ -536,11 +556,15 @@ public class UpdatePersonCommandHandlerTests
         var persons = await PersonsWith(target);
         var reset = new PasswordResetToken
         {
-            PersonId = target.Id, TokenHash = "reset", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "reset",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var verification = new EmailVerificationToken
         {
-            PersonId = target.Id, TokenHash = "verify", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "verify",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var verificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         await verificationTokens.CreateAsync(verification);
@@ -582,11 +606,15 @@ public class UpdatePersonCommandHandlerTests
         var verificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         var lateReset = new PasswordResetToken
         {
-            PersonId = target.Id, TokenHash = "late-reset", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "late-reset",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         var lateVerification = new EmailVerificationToken
         {
-            PersonId = target.Id, TokenHash = "late-verify", ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = target.Id,
+            TokenHash = "late-verify",
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
 
         // Issued as the address is written: an administrator's change makes no conditional write before
@@ -718,8 +746,11 @@ public class UpdatePersonCommandHandlerTests
         // When
         var output = await handler.HandleAsync(new UpdatePersonCommand
         {
-            Id = Guid.NewGuid(), Name = "Ana", Email = "ana@test.local",
-            ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+            Id = Guid.NewGuid(),
+            Name = "Ana",
+            Email = "ana@test.local",
+            ActingRole = (int)Roles.SystemAdmin,
+            ActingPersonId = Guid.NewGuid()
         });
 
         // Then

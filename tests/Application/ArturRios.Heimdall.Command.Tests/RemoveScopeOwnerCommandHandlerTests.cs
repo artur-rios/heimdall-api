@@ -58,12 +58,12 @@ public class RemoveScopeOwnerCommandHandlerTests
 
     private static RemoveScopeOwnerCommand Command(
         Guid scopeId, Guid personId, Roles actingRole = Roles.SystemAdmin, Guid? actingPersonId = null) => new()
-    {
-        ScopeId = scopeId,
-        PersonId = personId,
-        ActingRole = (int)actingRole,
-        ActingPersonId = actingPersonId ?? Guid.NewGuid()
-    };
+        {
+            ScopeId = scopeId,
+            PersonId = personId,
+            ActingRole = (int)actingRole,
+            ActingPersonId = actingPersonId ?? Guid.NewGuid()
+        };
 
     private static RemoveScopeOwnerCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true,
@@ -399,7 +399,8 @@ public class RemoveScopeOwnerCommandHandlerTests
         await SeedPersonAsync(persons, ownedScopes: scope);
         var atomicWrites = new InMemoryAtomicWrites
         {
-            Persons = persons.Query(), BeforeConditionalWrite = row => row.ScopeOwnerships.Clear()
+            Persons = persons.Query(),
+            BeforeConditionalWrite = row => row.ScopeOwnerships.Clear()
         };
 
         // When

@@ -32,14 +32,14 @@ public class ScopeOwnerInvitationsTests(PostgresFixture db)
 {
     private static ScopeOwnerInvitation New(Scope scope, Person invitee, Person? inviter, DateTime createdAt,
         DateTime expiresAt) => new()
-    {
-        PublicId = Guid.NewGuid(),
-        ScopeId = scope.Id,
-        InviteePersonId = invitee.Id,
-        InvitedByPersonId = inviter?.Id,
-        CreatedAt = createdAt,
-        ExpiresAt = expiresAt
-    };
+        {
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = invitee.Id,
+            InvitedByPersonId = inviter?.Id,
+            CreatedAt = createdAt,
+            ExpiresAt = expiresAt
+        };
 
     private static ScopeOwnerInvitation New(Scope scope, Person invitee, Person? inviter) =>
         New(scope, invitee, inviter, DateTime.UtcNow, DateTime.UtcNow.AddDays(7));

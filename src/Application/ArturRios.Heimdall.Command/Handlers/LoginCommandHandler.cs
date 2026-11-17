@@ -189,7 +189,9 @@ public class LoginCommandHandler(
         return output
             .WithData(new LoginCommandOutput
             {
-                Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = person.EmailVerified
+                Token = token.Token,
+                ExpiresAt = token.ExpiresAt,
+                EmailVerified = person.EmailVerified
             })
             .WithMessage(AuthMessages.LoginSuccessful);
     }
@@ -271,7 +273,9 @@ public class LoginCommandHandler(
         return output
             .WithData(new LoginCommandOutput
             {
-                RequiresTwoFactor = true, ChallengeToken = challenge.Token, AvailableMethods = methods
+                RequiresTwoFactor = true,
+                ChallengeToken = challenge.Token,
+                AvailableMethods = methods
             })
             .WithMessage(AuthMessages.TwoFactorRequired);
     }

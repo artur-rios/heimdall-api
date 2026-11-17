@@ -15,7 +15,10 @@ public class UpdateApplicationCommandValidatorTests
 
     private static UpdateApplicationCommand Command(string name, Guid ownerId) => new()
     {
-        ScopeId = Guid.NewGuid(), Id = Guid.NewGuid(), Name = name, OwnerId = ownerId
+        ScopeId = Guid.NewGuid(),
+        Id = Guid.NewGuid(),
+        Name = name,
+        OwnerId = ownerId
     };
 
     [UnitFact]

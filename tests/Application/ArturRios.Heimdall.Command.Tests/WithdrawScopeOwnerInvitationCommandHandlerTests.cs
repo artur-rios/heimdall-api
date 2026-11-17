@@ -28,7 +28,10 @@ public class WithdrawScopeOwnerInvitationCommandHandlerTests
 
     private static WithdrawScopeOwnerInvitationCommand Command(Guid scopeId, Guid invitationId) => new()
     {
-        ScopeId = scopeId, InvitationId = invitationId, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.ScopeAdmin
+        ScopeId = scopeId,
+        InvitationId = invitationId,
+        ActingPersonId = Guid.NewGuid(),
+        ActingRole = (int)Roles.ScopeAdmin
     };
 
     [UnitFact]

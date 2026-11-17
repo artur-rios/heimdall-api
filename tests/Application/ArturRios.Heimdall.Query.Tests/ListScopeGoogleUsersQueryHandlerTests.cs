@@ -22,17 +22,17 @@ public class ListScopeGoogleUsersQueryHandlerTests
 
     private static GoogleUser GoogleUser(
         long id, Scope scope, string name, string email, bool isDeleted = false) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        GoogleId = $"google-sub-{id}",
-        Name = name,
-        Email = email,
-        EmailVerified = true,
-        IsDeleted = isDeleted,
-        ScopeId = scope.Id,
-        Scope = scope
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            GoogleId = $"google-sub-{id}",
+            Name = name,
+            Email = email,
+            EmailVerified = true,
+            IsDeleted = isDeleted,
+            ScopeId = scope.Id,
+            Scope = scope
+        };
 
     private static IScopeOwnershipChecker Ownership(bool allowed)
     {

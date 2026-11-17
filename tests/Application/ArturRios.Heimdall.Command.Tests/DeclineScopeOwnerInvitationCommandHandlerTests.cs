@@ -18,7 +18,9 @@ public class DeclineScopeOwnerInvitationCommandHandlerTests
 
     private static DeclineScopeOwnerInvitationCommand Command(Person actor, ScopeOwnerInvitation invitation) => new()
     {
-        InvitationId = invitation.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+        InvitationId = invitation.PublicId,
+        ActingPersonId = actor.PublicId,
+        ActingRole = (int)Roles.ScopeAdmin
     };
 
     [UnitFact]

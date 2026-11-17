@@ -58,7 +58,8 @@ public class HardDeletePersonCommandHandlerTests
             Email = $"user-{Guid.NewGuid():N}@test.local",
             RoleId = (long)Roles.User,
             IsDeleted = isDeleted,
-            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+            ScopeId = scope.Id,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
         };
         await fakes.Persons.CreateAsync(person);
 
@@ -100,12 +101,14 @@ public class HardDeletePersonCommandHandlerTests
     {
         await fakes.PasswordResetTokens.CreateAsync(new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            PersonId = person.Id,
+            TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await fakes.EmailVerificationTokens.CreateAsync(new EmailVerificationToken
         {
-            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            PersonId = person.Id,
+            TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
     }
@@ -239,7 +242,9 @@ public class HardDeletePersonCommandHandlerTests
         var fakes = EmptyFakes();
         var command = new HardDeletePersonCommand
         {
-            Id = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+            Id = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin,
+            ActingPersonId = Guid.NewGuid()
         };
 
         // When

@@ -42,12 +42,14 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
         await using var context = db.CreateContext();
         context.PasswordResetTokens.Add(new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            PersonId = person.Id,
+            TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         context.EmailVerificationTokens.Add(new EmailVerificationToken
         {
-            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            PersonId = person.Id,
+            TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await context.SaveChangesAsync();

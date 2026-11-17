@@ -103,8 +103,10 @@ public class PendingRegistrationConfirmerTests
         {
             var scope = new Scope
             {
-                PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}",
-                SelfRegistrationEnabled = open, IsDeleted = isDeleted
+                PublicId = Guid.NewGuid(),
+                Name = $"scope-{Guid.NewGuid():N}",
+                SelfRegistrationEnabled = open,
+                IsDeleted = isDeleted
             };
             await Scopes.CreateAsync(scope);
             return scope;
@@ -119,10 +121,16 @@ public class PendingRegistrationConfirmerTests
             var (hash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(Password);
             await (into ?? Pending).CreateAsync(new PendingRegistration
             {
-                ScopeId = scope.Id, Scope = scope, Name = "New Person", Email = email,
-                PasswordHash = hash, Salt = salt, TokenHash = SingleUseTokenHash.Of(token),
+                ScopeId = scope.Id,
+                Scope = scope,
+                Name = "New Person",
+                Email = email,
+                PasswordHash = hash,
+                Salt = salt,
+                TokenHash = SingleUseTokenHash.Of(token),
                 ExpiresAt = DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromHours(1)),
-                CreatedAt = DateTime.UtcNow, FailedAttempts = failedAttempts
+                CreatedAt = DateTime.UtcNow,
+                FailedAttempts = failedAttempts
             });
             return token;
         }
@@ -294,8 +302,12 @@ public class PendingRegistrationConfirmerTests
         var token = await fixture.PendingAsync(scope);
         await fixture.Persons.CreateAsync(new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Holder", Email = Email.ToUpperInvariant(), RoleId = (long)Roles.User,
-            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+            PublicId = Guid.NewGuid(),
+            Name = "Holder",
+            Email = Email.ToUpperInvariant(),
+            RoleId = (long)Roles.User,
+            ScopeId = scope.Id,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
         });
 
         var result = await ConfirmAsync(fixture.Confirmer(), token);
@@ -315,7 +327,11 @@ public class PendingRegistrationConfirmerTests
         var token = await fixture.PendingAsync(scope);
         await fixture.GoogleUsers.CreateAsync(new GoogleUser
         {
-            PublicId = Guid.NewGuid(), Name = "Google", Email = Email, GoogleId = "sub", ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            Name = "Google",
+            Email = Email,
+            GoogleId = "sub",
+            ScopeId = scope.Id
         });
 
         var result = await ConfirmAsync(fixture.Confirmer(), token);

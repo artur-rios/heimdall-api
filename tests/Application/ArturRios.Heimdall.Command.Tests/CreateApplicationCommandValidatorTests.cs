@@ -14,7 +14,9 @@ public class CreateApplicationCommandValidatorTests
 
     private static CreateApplicationCommand Command(string name, Guid ownerId) => new()
     {
-        ScopeId = Guid.NewGuid(), Name = name, OwnerId = ownerId
+        ScopeId = Guid.NewGuid(),
+        Name = name,
+        OwnerId = ownerId
     };
 
     [UnitFact]

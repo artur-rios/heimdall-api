@@ -1,6 +1,6 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;

@@ -67,7 +67,8 @@ public class UpdateApplicationCommandHandlerTests
             Name = "User",
             Email = $"user-{Guid.NewGuid():N}@test.local",
             RoleId = (long)Roles.User,
-            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id }
+            ScopeId = scope.Id,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         };
         await persons.CreateAsync(person);
         return person;
@@ -105,14 +106,14 @@ public class UpdateApplicationCommandHandlerTests
 
     private static UpdateApplicationCommand Command(
         Guid scopeId, Guid id, Guid ownerId, int actingRole, Guid actingPersonId, string name = NewName) => new()
-    {
-        ScopeId = scopeId,
-        Id = id,
-        Name = name,
-        OwnerId = ownerId,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scopeId,
+            Id = id,
+            Name = name,
+            OwnerId = ownerId,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     private static UpdateApplicationCommandHandler Handler(
         AsyncFakeRepository<Application, long> applications,

@@ -28,16 +28,16 @@ public class GetScopeByIdQueryHandlerTests
 
     private static Scope ScopeWithOwner(
         Guid publicId, string name, Guid ownerPublicId, Guid? memberPublicId = null, bool isDeleted = false) => new()
-    {
-        PublicId = publicId,
-        Name = name,
-        Description = "A scope",
-        IsDeleted = isDeleted,
-        Owners = [new ScopeOwner { Person = new Person { PublicId = ownerPublicId } }],
-        Users = memberPublicId is null
+        {
+            PublicId = publicId,
+            Name = name,
+            Description = "A scope",
+            IsDeleted = isDeleted,
+            Owners = [new ScopeOwner { Person = new Person { PublicId = ownerPublicId } }],
+            Users = memberPublicId is null
             ? []
             : [new ScopeUser { Person = new Person { PublicId = memberPublicId.Value } }]
-    };
+        };
 
     [UnitFact]
     public async Task GivenSystemAdminActor_WhenHandlingGetById_ThenAnyScopeIsReturned()
@@ -51,7 +51,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = id,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -75,7 +77,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, ActingPersonId = ownerId, ActingRole = (int)Roles.ScopeAdmin
+            Id = id,
+            ActingPersonId = ownerId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -94,7 +98,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.ScopeAdmin
+            Id = id,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -115,7 +121,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, ActingPersonId = memberId, ActingRole = (int)Roles.User
+            Id = id,
+            ActingPersonId = memberId,
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -134,7 +142,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.User
+            Id = id,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -154,7 +164,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, ActingPersonId = ownerId, ActingRole = 0
+            Id = id,
+            ActingPersonId = ownerId,
+            ActingRole = 0
         });
 
         // Then
@@ -172,7 +184,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = Guid.NewGuid(), ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = Guid.NewGuid(),
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -191,7 +205,9 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = Guid.NewGuid(), ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.User
+            Id = Guid.NewGuid(),
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -211,8 +227,10 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, IncludeDeleted = false,
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = id,
+            IncludeDeleted = false,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -231,8 +249,10 @@ public class GetScopeByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, IncludeDeleted = true,
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = id,
+            IncludeDeleted = true,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -252,7 +272,9 @@ public class GetScopeByIdQueryHandlerTests
 
         var output = await handler.HandleAsync(new GetScopeByIdQuery
         {
-            Id = id, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = id,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         Assert.Equal("https://acme.test/verify-email", output.Data!.EmailVerificationUrl);

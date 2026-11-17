@@ -177,7 +177,10 @@ public class ListScopesQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new ListScopesQuery
         {
-            ActingPersonId = owner, ActingRole = (int)Roles.ScopeAdmin, PageNumber = 1, PageSize = 10
+            ActingPersonId = owner,
+            ActingRole = (int)Roles.ScopeAdmin,
+            PageNumber = 1,
+            PageSize = 10
         });
 
         // Then — the total is theirs too: the count of other tenants' scopes is not disclosed
@@ -199,8 +202,11 @@ public class ListScopesQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new ListScopesQuery
         {
-            ActingPersonId = owner, ActingRole = (int)Roles.ScopeAdmin, IncludeDeleted = true,
-            PageNumber = 1, PageSize = 10
+            ActingPersonId = owner,
+            ActingRole = (int)Roles.ScopeAdmin,
+            IncludeDeleted = true,
+            PageNumber = 1,
+            PageSize = 10
         });
 
         // Then
@@ -218,7 +224,10 @@ public class ListScopesQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new ListScopesQuery
         {
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.User, PageNumber = 1, PageSize = 10
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.User,
+            PageNumber = 1,
+            PageSize = 10
         });
 
         // Then

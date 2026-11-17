@@ -22,27 +22,40 @@ public class ListScopeOwnerInvitationsQueryHandlerTests
 
     private static Scope Scope(long id, bool isDeleted = false) => new()
     {
-        Id = id, PublicId = Guid.NewGuid(), Name = $"scope-{id}", IsDeleted = isDeleted
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = $"scope-{id}",
+        IsDeleted = isDeleted
     };
 
     private static Person Person(long id, string name, bool isDeleted = false, bool isRestricted = false) => new()
     {
-        Id = id, PublicId = Guid.NewGuid(), Name = name, Email = $"{name.ToLowerInvariant()}@test.local",
-        RoleId = (long)Roles.ScopeAdmin, IsDeleted = isDeleted,
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = name,
+        Email = $"{name.ToLowerInvariant()}@test.local",
+        RoleId = (long)Roles.ScopeAdmin,
+        IsDeleted = isDeleted,
         ProcessingRestrictedAt = isRestricted ? s_now.AddDays(-1) : null
     };
 
     private static ScopeOwnerInvitation Invitation(
         long id, Scope scope, Person invitee, Person? inviter, DateTime? createdAt = null,
         DateTime? expiresAt = null, DateTime? endedAt = null) => new()
-    {
-        Id = id, PublicId = Guid.NewGuid(),
-        ScopeId = scope.Id, Scope = scope,
-        InviteePersonId = invitee.Id, Invitee = invitee,
-        InvitedByPersonId = inviter?.Id, InvitedBy = inviter,
-        CreatedAt = createdAt ?? s_now.AddMinutes(-id), ExpiresAt = expiresAt ?? s_now.AddDays(7),
-        EndedAt = endedAt, Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Withdrawn
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            Scope = scope,
+            InviteePersonId = invitee.Id,
+            Invitee = invitee,
+            InvitedByPersonId = inviter?.Id,
+            InvitedBy = inviter,
+            CreatedAt = createdAt ?? s_now.AddMinutes(-id),
+            ExpiresAt = expiresAt ?? s_now.AddDays(7),
+            EndedAt = endedAt,
+            Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Withdrawn
+        };
 
     private static async Task<AsyncFakeRepository<T, long>> RepositoryWith<T>(params T[] items) where T : Entity<long>
     {
@@ -72,8 +85,11 @@ public class ListScopeOwnerInvitationsQueryHandlerTests
 
     private static ListScopeOwnerInvitationsQuery Query(Scope scope, int pageSize = 20) => new()
     {
-        ScopeId = scope.PublicId, PageNumber = 1, PageSize = pageSize,
-        ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.ScopeAdmin
+        ScopeId = scope.PublicId,
+        PageNumber = 1,
+        PageSize = pageSize,
+        ActingPersonId = Guid.NewGuid(),
+        ActingRole = (int)Roles.ScopeAdmin
     };
 
     [UnitFact]

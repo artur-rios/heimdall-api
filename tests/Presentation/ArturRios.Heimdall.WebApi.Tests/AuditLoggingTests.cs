@@ -24,7 +24,8 @@ public class AuditLoggingTests(PostgresFixture db) : WebApiTest<Program>(Environ
 {
     private static CreateApplicationCommand Command(Guid ownerId, string? name = null) => new()
     {
-        Name = name ?? $"app-{Guid.NewGuid():N}", OwnerId = ownerId
+        Name = name ?? $"app-{Guid.NewGuid():N}",
+        OwnerId = ownerId
     };
 
     private static string ApplicationsRoute(Guid scopeId) => $"/api/scopes/{scopeId}/applications";

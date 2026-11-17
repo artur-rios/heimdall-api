@@ -260,7 +260,9 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
 
     private static Dictionary<string, string> Variables(string owner, string runtime, string database) => new()
     {
-        ["owner"] = owner, ["runtime"] = runtime, ["database"] = database
+        ["owner"] = owner,
+        ["runtime"] = runtime,
+        ["database"] = database
     };
 
     /// <summary>
@@ -389,13 +391,19 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
         var admin = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Root", Email = $"root-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.SystemAdmin, EmailVerified = true
+            PublicId = Guid.NewGuid(),
+            Name = "Root",
+            Email = $"root-{Guid.NewGuid():N}@test.local",
+            RoleId = (long)Roles.SystemAdmin,
+            EmailVerified = true
         };
         var owner = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Owner", Email = $"owner-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
+            PublicId = Guid.NewGuid(),
+            Name = "Owner",
+            Email = $"owner-{Guid.NewGuid():N}@test.local",
+            RoleId = (long)Roles.ScopeAdmin,
+            EmailVerified = true
         };
         context.Scopes.Add(scope);
         context.Persons.AddRange(admin, owner);
@@ -566,7 +574,8 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
     {
         var result = await db.RunScriptAsync(script, new Dictionary<string, string>
         {
-            ["owner"] = "missing_variable_owner", ["database"] = "missing_variable_database"
+            ["owner"] = "missing_variable_owner",
+            ["database"] = "missing_variable_database"
         });
 
         Assert.NotEqual(0, result.ExitCode);

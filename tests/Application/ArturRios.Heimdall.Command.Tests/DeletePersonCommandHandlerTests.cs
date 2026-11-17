@@ -31,7 +31,8 @@ public class DeletePersonCommandHandlerTests
         RoleId = (long)Roles.User,
         IsDeleted = isDeleted,
         UpdatedAt = s_stamp,
-        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id,
+        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person ScopeAdmin(long id, bool isDeleted = false, params Scope[] owned) => new()
@@ -152,7 +153,9 @@ public class DeletePersonCommandHandlerTests
         var persons = await PersonsWith();
         var command = new DeletePersonCommand
         {
-            Id = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+            Id = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin,
+            ActingPersonId = Guid.NewGuid()
         };
 
         // When

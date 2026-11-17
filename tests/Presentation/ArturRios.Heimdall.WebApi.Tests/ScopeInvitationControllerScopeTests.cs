@@ -32,9 +32,13 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
         await using var context = db.CreateContext();
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
-            InvitedByPersonId = inviter?.Id, CreatedAt = DateTime.UtcNow.AddDays(-1),
-            ExpiresAt = expiresAt ?? DateTime.UtcNow.AddDays(6), EndedAt = endedAt,
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = invitee.Id,
+            InvitedByPersonId = inviter?.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = expiresAt ?? DateTime.UtcNow.AddDays(6),
+            EndedAt = endedAt,
             Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
         };
         context.ScopeOwnerInvitations.Add(invitation);

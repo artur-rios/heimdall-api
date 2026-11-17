@@ -193,7 +193,8 @@ public class PersonTokenAudienceTests
         {
             Claims = s_mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
             {
-                MfaPending = true, ChallengeId = Guid.NewGuid()
+                MfaPending = true,
+                ChallengeId = Guid.NewGuid()
             })
         };
         var crafted = new JwtHandler().CreateToken(configuration);
@@ -218,7 +219,8 @@ public class PersonTokenAudienceTests
             Audience = audience,
             Claims = s_mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
             {
-                MfaPending = true, ChallengeId = Guid.NewGuid()
+                MfaPending = true,
+                ChallengeId = Guid.NewGuid()
             })
         };
         var crafted = new JwtHandler().CreateToken(configuration);

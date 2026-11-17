@@ -1,4 +1,3 @@
-using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -6,6 +5,7 @@ using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -36,7 +36,10 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = appEnabled, EmailEnabled = emailEnabled,
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = appEnabled,
+            EmailEnabled = emailEnabled,
             ChallengeId = TestTokens.SeededChallengeId
         };
 

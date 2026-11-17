@@ -111,11 +111,15 @@ public class HardDeleteScopeCommandHandler(
         var erased = users
             .Select(user => new ErasedSubject
             {
-                Id = user.PublicId, Kind = (int)ErasedSubjectKinds.Person, CreatedAt = DateTime.UtcNow
+                Id = user.PublicId,
+                Kind = (int)ErasedSubjectKinds.Person,
+                CreatedAt = DateTime.UtcNow
             })
             .Concat(googleUsers.Select(googleUser => new ErasedSubject
             {
-                Id = googleUser.PublicId, Kind = (int)ErasedSubjectKinds.GoogleUser, CreatedAt = DateTime.UtcNow
+                Id = googleUser.PublicId,
+                Kind = (int)ErasedSubjectKinds.GoogleUser,
+                CreatedAt = DateTime.UtcNow
             }))
             .ToList();
 

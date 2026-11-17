@@ -47,15 +47,23 @@ public class IssueApplicationTokenCommandHandlerTests
         var scope = new Scope { Id = 1, PublicId = Guid.NewGuid(), Name = "Acme", IsDeleted = scopeDeleted };
         var application = new Application
         {
-            Id = 1, PublicId = Guid.NewGuid(), Name = "Billing Service", IsDeleted = applicationDeleted,
-            ScopeId = scope.Id, Scope = scope
+            Id = 1,
+            PublicId = Guid.NewGuid(),
+            Name = "Billing Service",
+            IsDeleted = applicationDeleted,
+            ScopeId = scope.Id,
+            Scope = scope
         };
         var secret = ApplicationCredentialSecret.New();
         var credential = new ApplicationCredential
         {
-            Id = 1, ApplicationId = application.Id, Application = application,
-            SecretHash = ApplicationCredentialSecret.HashOf(secret), CreatedAt = DateTime.UtcNow.AddDays(-1),
-            ExpiresAt = expiresAt, RevokedAt = revokedAt
+            Id = 1,
+            ApplicationId = application.Id,
+            Application = application,
+            SecretHash = ApplicationCredentialSecret.HashOf(secret),
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = expiresAt,
+            RevokedAt = revokedAt
         };
         await _credentials.CreateAsync(credential);
         return (credential, secret);
@@ -120,9 +128,15 @@ public class IssueApplicationTokenCommandHandlerTests
         var command = Command(credential, secret);
         switch (refusal)
         {
-            case "wrong-secret": command.Secret = ApplicationCredentialSecret.New(); break;
-            case "other-application": command.ApplicationId = Guid.NewGuid(); break;
-            case "other-scope": command.ScopeId = Guid.NewGuid(); break;
+            case "wrong-secret":
+                command.Secret = ApplicationCredentialSecret.New();
+                break;
+            case "other-application":
+                command.ApplicationId = Guid.NewGuid();
+                break;
+            case "other-scope":
+                command.ScopeId = Guid.NewGuid();
+                break;
         }
 
         // When

@@ -80,8 +80,14 @@ public class RegistrationProcessorTests
         {
             var pending = new PendingRegistration
             {
-                ScopeId = scope.Id, Name = "Earlier", Email = email, PasswordHash = [1], Salt = [2],
-                TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = expiresAt, CreatedAt = DateTime.UtcNow
+                ScopeId = scope.Id,
+                Name = "Earlier",
+                Email = email,
+                PasswordHash = [1],
+                Salt = [2],
+                TokenHash = Guid.NewGuid().ToString("N"),
+                ExpiresAt = expiresAt,
+                CreatedAt = DateTime.UtcNow
             };
             await Pending.CreateAsync(pending);
             return pending;
@@ -92,8 +98,10 @@ public class RegistrationProcessorTests
         {
             var scope = new Scope
             {
-                PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}",
-                SelfRegistrationEnabled = open, IsDeleted = isDeleted,
+                PublicId = Guid.NewGuid(),
+                Name = $"scope-{Guid.NewGuid():N}",
+                SelfRegistrationEnabled = open,
+                IsDeleted = isDeleted,
                 EmailVerificationUrl = emailVerificationUrl
             };
             await Scopes.CreateAsync(scope);
@@ -104,8 +112,12 @@ public class RegistrationProcessorTests
         {
             var person = new Person
             {
-                PublicId = Guid.NewGuid(), Name = "Existing", Email = email, RoleId = (long)Roles.User,
-                ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope },
+                PublicId = Guid.NewGuid(),
+                Name = "Existing",
+                Email = email,
+                RoleId = (long)Roles.User,
+                ScopeId = scope.Id,
+                ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope },
                 ProcessingRestrictedAt = restrictedAt
             };
             await Persons.CreateAsync(person);
@@ -162,7 +174,10 @@ public class RegistrationProcessorTests
         var scope = await fixture.ScopeAsync();
         await fixture.GoogleUsers.CreateAsync(new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = "sub", Email = "new@test.local", ScopeId = scope.Id,
+            PublicId = Guid.NewGuid(),
+            GoogleId = "sub",
+            Email = "new@test.local",
+            ScopeId = scope.Id,
             IsDeleted = true
         });
 
@@ -196,7 +211,10 @@ public class RegistrationProcessorTests
         var scope = await fixture.ScopeAsync();
         await fixture.GoogleUsers.CreateAsync(new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = "sub", Email = "New@Test.Local", ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            GoogleId = "sub",
+            Email = "New@Test.Local",
+            ScopeId = scope.Id
         });
 
         await fixture.Processor().ProcessAsync(Request(scope));
@@ -517,8 +535,12 @@ public class RegistrationProcessorTests
         var scope = await fixture.ScopeAsync();
         await fixture.GoogleUsers.CreateAsync(new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = "google-1", Name = "Google", Email = "google@test.local",
-            EmailVerified = true, ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            GoogleId = "google-1",
+            Name = "Google",
+            Email = "google@test.local",
+            EmailVerified = true,
+            ScopeId = scope.Id
         });
         var processor = fixture.Processor();
 

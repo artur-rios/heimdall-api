@@ -1,9 +1,9 @@
+using System.Text.Json;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.IdentityModel.JsonWebTokens;
-using System.Text.Json;
 
 namespace ArturRios.Heimdall.WebApi.Security;
 

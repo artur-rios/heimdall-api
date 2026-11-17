@@ -40,7 +40,10 @@ public class RegisterCommandHandlerTests
         var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = new Scope
         {
-            PublicId = Guid.NewGuid(), Name = "Acme", SelfRegistrationEnabled = open, IsDeleted = isDeleted
+            PublicId = Guid.NewGuid(),
+            Name = "Acme",
+            SelfRegistrationEnabled = open,
+            IsDeleted = isDeleted
         };
         await scopes.CreateAsync(scope);
         return (scopes, scope);
@@ -48,7 +51,10 @@ public class RegisterCommandHandlerTests
 
     private static RegisterCommand Command(Guid? scopeId, string email = "new@test.local") => new()
     {
-        Name = "New Person", Email = email, Password = Password, ScopeId = scopeId
+        Name = "New Person",
+        Email = email,
+        Password = Password,
+        ScopeId = scopeId
     };
 
     private static RegisterCommandHandler Handler(AsyncFakeRepository<Scope, long> scopes, IRegistrationQueue queue) =>

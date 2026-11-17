@@ -87,7 +87,9 @@ public class CreateAdminCommandHandlerTests
         var command = Command((int)Roles.ScopeAdmin);
         await persons.CreateAsync(new Person
         {
-            Email = command.Email, RoleId = (long)Roles.ScopeAdmin, IsDeleted = false
+            Email = command.Email,
+            RoleId = (long)Roles.ScopeAdmin,
+            IsDeleted = false
         });
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateAdminCommandHandler(ValidValidator().Object, persons, persons, email.Object);
@@ -110,7 +112,9 @@ public class CreateAdminCommandHandlerTests
         var command = Command((int)Roles.ScopeAdmin);
         await persons.CreateAsync(new Person
         {
-            Email = command.Email.ToUpperInvariant(), RoleId = (long)Roles.ScopeAdmin, IsDeleted = false
+            Email = command.Email.ToUpperInvariant(),
+            RoleId = (long)Roles.ScopeAdmin,
+            IsDeleted = false
         });
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateAdminCommandHandler(ValidValidator().Object, persons, persons, email.Object);

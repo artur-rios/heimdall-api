@@ -5,8 +5,8 @@ using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Http;
+using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.IdentityModel.JsonWebTokens;
 

@@ -20,26 +20,39 @@ public class ListMyScopeInvitationsQueryHandlerTests
 
     private static Scope Scope(long id, bool isDeleted = false) => new()
     {
-        Id = id, PublicId = Guid.NewGuid(), Name = $"scope-{id}", IsDeleted = isDeleted
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = $"scope-{id}",
+        IsDeleted = isDeleted
     };
 
     private static Person Person(long id, string name, bool isDeleted = false, bool isRestricted = false) => new()
     {
-        Id = id, PublicId = Guid.NewGuid(), Name = name, Email = $"{name.ToLowerInvariant()}@test.local",
-        RoleId = (long)Roles.ScopeAdmin, IsDeleted = isDeleted,
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = name,
+        Email = $"{name.ToLowerInvariant()}@test.local",
+        RoleId = (long)Roles.ScopeAdmin,
+        IsDeleted = isDeleted,
         ProcessingRestrictedAt = isRestricted ? s_now.AddDays(-1) : null
     };
 
     private static ScopeOwnerInvitation Invitation(long id, Scope scope, Person invitee, Person? inviter,
         DateTime? expiresAt = null, DateTime? endedAt = null) => new()
-    {
-        Id = id, PublicId = Guid.NewGuid(),
-        ScopeId = scope.Id, Scope = scope,
-        InviteePersonId = invitee.Id, Invitee = invitee,
-        InvitedByPersonId = inviter?.Id, InvitedBy = inviter,
-        CreatedAt = s_now.AddDays(-1), ExpiresAt = expiresAt ?? s_now.AddDays(6),
-        EndedAt = endedAt, Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            Scope = scope,
+            InviteePersonId = invitee.Id,
+            Invitee = invitee,
+            InvitedByPersonId = inviter?.Id,
+            InvitedBy = inviter,
+            CreatedAt = s_now.AddDays(-1),
+            ExpiresAt = expiresAt ?? s_now.AddDays(6),
+            EndedAt = endedAt,
+            Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
+        };
 
     private static async Task<AsyncFakeRepository<T, long>> RepositoryWith<T>(params T[] items) where T : Entity<long>
     {
@@ -55,7 +68,10 @@ public class ListMyScopeInvitationsQueryHandlerTests
 
     private static ListMyScopeInvitationsQuery Query(Person actor, int pageSize = 20) => new()
     {
-        PageNumber = 1, PageSize = pageSize, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+        PageNumber = 1,
+        PageSize = pageSize,
+        ActingPersonId = actor.PublicId,
+        ActingRole = (int)Roles.ScopeAdmin
     };
 
     [UnitFact]

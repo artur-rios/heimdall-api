@@ -16,7 +16,9 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
 {
     private static CreateScopeOwnerCommand Command() => new()
     {
-        Name = "Owner", Email = $"owner-{Guid.NewGuid():N}@test.local", Password = "Str0ngPass!"
+        Name = "Owner",
+        Email = $"owner-{Guid.NewGuid():N}@test.local",
+        Password = "Str0ngPass!"
     };
 
     [FunctionalFact]

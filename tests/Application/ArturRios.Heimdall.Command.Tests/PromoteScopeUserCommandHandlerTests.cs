@@ -50,7 +50,8 @@ public class PromoteScopeUserCommandHandlerTests
             IsDeleted = isDeleted,
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             UpdatedAt = DateTime.UtcNow.AddDays(-1),
-            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+            ScopeId = scope.Id,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
         };
 
         await persons.CreateAsync(person);
@@ -80,12 +81,12 @@ public class PromoteScopeUserCommandHandlerTests
 
     private static PromoteScopeUserCommand Command(
         Guid scopeId, Guid personId, Roles actingRole = Roles.SystemAdmin, Guid? actingPersonId = null) => new()
-    {
-        ScopeId = scopeId,
-        PersonId = personId,
-        ActingRole = (int)actingRole,
-        ActingPersonId = actingPersonId ?? Guid.NewGuid()
-    };
+        {
+            ScopeId = scopeId,
+            PersonId = personId,
+            ActingRole = (int)actingRole,
+            ActingPersonId = actingPersonId ?? Guid.NewGuid()
+        };
 
     private static PromoteScopeUserCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true,

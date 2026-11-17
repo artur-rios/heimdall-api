@@ -372,7 +372,8 @@ public class ResetPasswordCommandHandlerTests
                 person.RoleId = (long)Roles.User;
                 person.ScopeMembership = new ScopeUser
                 {
-                    ScopeId = 7, Scope = new Scope { Id = 7, Name = "gone", IsDeleted = true }
+                    ScopeId = 7,
+                    Scope = new Scope { Id = 7, Name = "gone", IsDeleted = true }
                 };
                 break;
             case "scope admin without a live scope":
@@ -441,7 +442,8 @@ public class ResetPasswordCommandHandlerTests
         fixture.Person.RoleId = (long)Roles.User;
         fixture.Person.ScopeMembership = new ScopeUser
         {
-            ScopeId = 7, Scope = new Scope { Id = 7, Name = "live", IsDeleted = false }
+            ScopeId = 7,
+            Scope = new Scope { Id = 7, Name = "live", IsDeleted = false }
         };
         await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
 

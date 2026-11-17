@@ -66,12 +66,12 @@ public class DeleteApplicationCommandHandlerTests
 
     private static DeleteApplicationCommand Command(
         Guid scopeId, Guid id, int actingRole, Guid actingPersonId) => new()
-    {
-        ScopeId = scopeId,
-        Id = id,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scopeId,
+            Id = id,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     private static DeleteApplicationCommandHandler Handler(AsyncFakeRepository<Application, long> applications) =>
         new(applications, applications);

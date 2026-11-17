@@ -1,7 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
-using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Command.Input.Validation;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -31,7 +31,9 @@ public class SetSelfRegistrationCommandHandlerTests
         var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = new Scope
         {
-            PublicId = Guid.NewGuid(), Name = "Acme", IsDeleted = isDeleted,
+            PublicId = Guid.NewGuid(),
+            Name = "Acme",
+            IsDeleted = isDeleted,
             SelfRegistrationEnabled = selfRegistrationEnabled
         };
         await scopes.CreateAsync(scope);
@@ -45,7 +47,10 @@ public class SetSelfRegistrationCommandHandlerTests
 
     private static SetSelfRegistrationCommand Command(Guid scopeId, bool? enabled) => new()
     {
-        Id = scopeId, Enabled = enabled, ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        Id = scopeId,
+        Enabled = enabled,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     [UnitFact]

@@ -184,7 +184,8 @@ public class PasswordResetServiceTests
         var other = new Scope { Name = "Other", PasswordResetUrl = "https://other.test/reset" };
         var scope = new Scope
         {
-            Name = "Fortuna", PasswordResetUrl = "https://fortuna.test/password-reset",
+            Name = "Fortuna",
+            PasswordResetUrl = "https://fortuna.test/password-reset",
             EmailVerificationUrl = "https://fortuna.test/verify-email"
         };
         var (service, sender) = await ServiceAsync(other, scope);

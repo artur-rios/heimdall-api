@@ -72,7 +72,11 @@ public class GetTwoFactorStatusQueryHandlerTests
         var persons = await RepositoryWith(PersonWith(personId));
         var configurations = await RepositoryWith(new TwoFactorAuth
         {
-            Id = 1, PersonId = 1, AppEnabled = true, EmailEnabled = true, IsActive = false
+            Id = 1,
+            PersonId = 1,
+            AppEnabled = true,
+            EmailEnabled = true,
+            IsActive = false
         });
         var recoveryCodes = await RepositoryWith<TwoFactorRecoveryCode>();
         var handler = new GetTwoFactorStatusQueryHandler(persons, configurations, recoveryCodes);
@@ -95,7 +99,11 @@ public class GetTwoFactorStatusQueryHandlerTests
         var persons = await RepositoryWith(PersonWith(personId));
         var configurations = await RepositoryWith(new TwoFactorAuth
         {
-            Id = 1, PersonId = 1, AppEnabled = true, EmailEnabled = false, IsActive = true
+            Id = 1,
+            PersonId = 1,
+            AppEnabled = true,
+            EmailEnabled = false,
+            IsActive = true
         });
         var recoveryCodes = await RepositoryWith<TwoFactorRecoveryCode>();
         var handler = new GetTwoFactorStatusQueryHandler(persons, configurations, recoveryCodes);
@@ -118,7 +126,10 @@ public class GetTwoFactorStatusQueryHandlerTests
         var persons = await RepositoryWith(PersonWith(personId));
         var configurations = await RepositoryWith(new TwoFactorAuth
         {
-            Id = 1, PersonId = 1, AppEnabled = true, IsActive = true
+            Id = 1,
+            PersonId = 1,
+            AppEnabled = true,
+            IsActive = true
         });
         var recoveryCodes = await RepositoryWith(
             new TwoFactorRecoveryCode { Id = 1, TwoFactorAuthId = 1, CodeHash = [1], Used = false },

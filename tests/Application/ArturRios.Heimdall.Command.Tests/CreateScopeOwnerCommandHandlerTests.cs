@@ -123,7 +123,9 @@ public class CreateScopeOwnerCommandHandlerTests
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {
-            Email = command.Email, RoleId = (long)Roles.ScopeAdmin, IsDeleted = false
+            Email = command.Email,
+            RoleId = (long)Roles.ScopeAdmin,
+            IsDeleted = false
         });
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateScopeOwnerCommandHandler(
@@ -147,7 +149,9 @@ public class CreateScopeOwnerCommandHandlerTests
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {
-            Email = command.Email.ToUpperInvariant(), RoleId = (long)Roles.ScopeAdmin, IsDeleted = false
+            Email = command.Email.ToUpperInvariant(),
+            RoleId = (long)Roles.ScopeAdmin,
+            IsDeleted = false
         });
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateScopeOwnerCommandHandler(

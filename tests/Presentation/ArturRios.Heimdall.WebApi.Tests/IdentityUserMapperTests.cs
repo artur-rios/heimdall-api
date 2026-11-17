@@ -160,7 +160,8 @@ public class IdentityUserMapperTests
         // Given a token whose id claim is not a GUID
         var claims = new Dictionary<string, string>
         {
-            [TokenClaimKeys.Id] = id, [TokenClaimKeys.RoleId] = role
+            [TokenClaimKeys.Id] = id,
+            [TokenClaimKeys.RoleId] = role
         };
 
         // When / Then
@@ -177,7 +178,8 @@ public class IdentityUserMapperTests
         // claiming role 99 must not authenticate anyone
         var claims = new Dictionary<string, string>
         {
-            [TokenClaimKeys.Id] = Guid.NewGuid().ToString(), [TokenClaimKeys.RoleId] = role
+            [TokenClaimKeys.Id] = Guid.NewGuid().ToString(),
+            [TokenClaimKeys.RoleId] = role
         };
 
         // When / Then

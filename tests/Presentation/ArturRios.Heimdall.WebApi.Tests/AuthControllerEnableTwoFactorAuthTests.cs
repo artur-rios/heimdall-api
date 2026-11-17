@@ -146,7 +146,9 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
         {
             context.TwoFactorAuths.Add(new TwoFactorAuth
             {
-                PersonId = person.Id, IsActive = true, AppEnabled = true
+                PersonId = person.Id,
+                IsActive = true,
+                AppEnabled = true
             });
             await context.SaveChangesAsync();
         }

@@ -1,7 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
-using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
@@ -244,14 +244,18 @@ public class LiftProcessingRestrictionCommandHandlerTests
         var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Ada", Email = "ada@test.local", RoleId = (long)Roles.User
+            PublicId = Guid.NewGuid(),
+            Name = "Ada",
+            Email = "ada@test.local",
+            RoleId = (long)Roles.User
         };
         await persons.CreateAsync(person);
 
         var output = await Handler(persons, new(), Notifier(true))
             .HandleAsync(new LiftProcessingRestrictionCommand
             {
-                ActingPersonId = person.PublicId, ActingRole = (int)Roles.User
+                ActingPersonId = person.PublicId,
+                ActingRole = (int)Roles.User
             });
 
         Assert.False(output.Success);

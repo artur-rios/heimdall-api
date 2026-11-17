@@ -50,7 +50,10 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         public ConfirmTwoFactorAuthCommand Command(string? appCode = null, string? emailCode = null) => new()
         {
-            AppCode = appCode, EmailCode = emailCode, ActingPersonId = Person.PublicId, ActingRole = (int)Roles.User
+            AppCode = appCode,
+            EmailCode = emailCode,
+            ActingPersonId = Person.PublicId,
+            ActingRole = (int)Roles.User
         };
     }
 
@@ -161,7 +164,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         {
             await fixture.RecoveryCodes.CreateAsync(new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = [(byte)i], Used = false
+                TwoFactorAuthId = twoFactorAuth.Id,
+                CodeHash = [(byte)i],
+                Used = false
             });
         }
 
@@ -294,7 +299,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         // When
         var output = await fixture.Handler().HandleAsync(new ConfirmTwoFactorAuthCommand
         {
-            AppCode = "123456", ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.User
+            AppCode = "123456",
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -424,7 +431,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         var fixture = await FixtureAsync();
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = fixture.Person.Id, IsActive = true, AppEnabled = true
+            PersonId = fixture.Person.Id,
+            IsActive = true,
+            AppEnabled = true
         });
 
         // When

@@ -75,13 +75,13 @@ public class ListScopeAdminsQueryHandlerTests
 
     private static ListScopeAdminsQuery Query(
         Guid? excludeOwnersOfScopeId = null, int pageSize = 10, Roles actingRole = Roles.SystemAdmin) => new()
-    {
-        PageNumber = 1,
-        PageSize = pageSize,
-        ExcludeOwnersOfScopeId = excludeOwnersOfScopeId,
-        ActingPersonId = Guid.NewGuid(),
-        ActingRole = (int)actingRole
-    };
+        {
+            PageNumber = 1,
+            PageSize = pageSize,
+            ExcludeOwnersOfScopeId = excludeOwnersOfScopeId,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)actingRole
+        };
 
     private static ListScopeAdminsQueryHandler HandlerFor(
         AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true) =>

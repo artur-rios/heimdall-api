@@ -84,11 +84,16 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeALift_WhenSavedAsAWholeRow_ThenTheLiftStands()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions
+        {
+            Name = RealName,
+            EmailPrefix = "stale",
+            Configure = p =>
         {
             p.ProcessingRestrictedAt = Now().AddDays(-1);
             p.RestrictionGround = (int)RestrictionGrounds.ObjectionPending;
-        } });
+        }
+        });
         var notifiedAt = Now();
 
         // When
@@ -122,11 +127,16 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeAnErasureRequest_WhenSavedAsAWholeRow_ThenTheRequestAndSuspensionStand()
     {
         // Given a restricted person, whose request also lifts the restriction
-        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions
+        {
+            Name = RealName,
+            EmailPrefix = "stale",
+            Configure = p =>
         {
             p.ProcessingRestrictedAt = Now().AddDays(-1);
             p.RestrictionGround = (int)RestrictionGrounds.AccuracyContested;
-        } });
+        }
+        });
         var requestedAt = Now();
 
         // When
@@ -163,12 +173,17 @@ public class PersonStaleSaveTests(PostgresFixture db)
     {
         // Given
         var requestedAt = Now().AddDays(-2);
-        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions
+        {
+            Name = RealName,
+            EmailPrefix = "stale",
+            Configure = p =>
         {
             p.ErasureRequestedAt = requestedAt;
             p.ErasureDueAt = requestedAt.AddDays(30);
             p.ErasureBlockedReason = "blocked";
-        } });
+        }
+        });
 
         // When
         var stored = await StaleSaveAcrossAsync(person.Id, (writes, current) =>
@@ -184,14 +199,19 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeAnonymisation_WhenSavedAsAWholeRow_ThenTheAnonymisationStands()
     {
         // Given a deleted person with a lockout on record
-        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions
+        {
+            Name = RealName,
+            EmailPrefix = "stale",
+            Configure = p =>
         {
             p.IsDeleted = true;
             p.DeletedAt = Now().AddDays(-400);
             p.DeletionKind = (int)DeletionKinds.Administrative;
             p.FailedLoginAttempts = 3;
             p.LockedOutUntil = Now().AddMinutes(10);
-        } });
+        }
+        });
         var placeholder = $"anonymised-{person.PublicId:N}@anonymised.invalid";
 
         // When
@@ -276,12 +296,17 @@ public class PersonStaleSaveTests(PostgresFixture db)
     {
         // Given a User of a scope
         var scope = await Seeds.ScopeAsync(db);
-        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions
+        {
+            Name = RealName,
+            EmailPrefix = "stale",
+            Configure = p =>
         {
             p.RoleId = (long)Roles.User;
             p.ScopeId = scope.Id;
             p.ScopeMembership = new ScopeUser { ScopeId = scope.Id };
-        } });
+        }
+        });
 
         // When promoted (UC-23) the way the handler does it: the role and the membership row targeted,
         // the ownership row inserted in the same transaction (#205)
@@ -341,11 +366,16 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadWhileLockedOut_WhenSavedAfterTheLockoutWasCleared_ThenItStaysCleared()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions
+        {
+            Name = RealName,
+            EmailPrefix = "stale",
+            Configure = p =>
         {
             p.FailedLoginAttempts = 4;
             p.LockedOutUntil = Now().AddMinutes(15);
-        } });
+        }
+        });
 
         // When
         var stored = await StaleSaveAcrossAsync(person.Id, (writes, current) => writes.ClearLoginAttemptsAsync(current));

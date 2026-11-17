@@ -47,13 +47,13 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
         public DisableTwoFactorAuthCommand Command(
             string? password = Password, string? code = null, string? recoveryCode = null) => new()
-        {
-            Password = password ?? string.Empty,
-            Code = code,
-            RecoveryCode = recoveryCode,
-            ActingPersonId = Person.PublicId,
-            ActingRole = (int)Roles.User
-        };
+            {
+                Password = password ?? string.Empty,
+                Code = code,
+                RecoveryCode = recoveryCode,
+                ActingPersonId = Person.PublicId,
+                ActingRole = (int)Roles.User
+            };
     }
 
     private static string CurrentTotpCode() => new Totp(Base32Encoding.ToBytes(Base32Secret)).ComputeTotp();
@@ -206,7 +206,10 @@ public class DisableTwoFactorAuthCommandHandlerTests
         var fixture = await FixtureAsync();
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = fixture.Person.Id, IsActive = false, AppEnabled = true, TotpSecretEncrypted = [1, 2, 3]
+            PersonId = fixture.Person.Id,
+            IsActive = false,
+            AppEnabled = true,
+            TotpSecretEncrypted = [1, 2, 3]
         });
 
         // When

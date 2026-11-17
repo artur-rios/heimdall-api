@@ -128,7 +128,9 @@ public sealed class UnitTokenReaders
         ChallengeReader => (ClaimsOf(Mapper.ToClaims(
             new IdentityUser(Person.Id, Person.RoleId)
             {
-                MfaPending = true, ChallengeId = ChallengeId, SecurityStamp = Person.SecurityStamp
+                MfaPending = true,
+                ChallengeId = ChallengeId,
+                SecurityStamp = Person.SecurityStamp
             })), Audiences.TwoFactorChallenge),
         ApplicationReader => (new Dictionary<string, object>
         {

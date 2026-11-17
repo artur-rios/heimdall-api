@@ -16,7 +16,8 @@ public class ReadinessCacheTests
         var clock = new ManualTimeProvider();
         var cache = new ReadinessCache(clock);
         var reads = 0;
-        Task<bool> Check() { reads++; return Task.FromResult(false); }
+        Task<bool> Check()
+        { reads++; return Task.FromResult(false); }
 
         // When
         var first = await cache.IsReadyAsync(Check);
@@ -37,7 +38,8 @@ public class ReadinessCacheTests
         var cache = new ReadinessCache(clock);
         var healthy = false;
         var reads = 0;
-        Task<bool> Check() { reads++; return Task.FromResult(healthy); }
+        Task<bool> Check()
+        { reads++; return Task.FromResult(healthy); }
         await cache.IsReadyAsync(Check);
         healthy = true;
 
@@ -57,7 +59,8 @@ public class ReadinessCacheTests
         var cache = new ReadinessCache(new ManualTimeProvider());
         var release = new TaskCompletionSource<bool>();
         var reads = 0;
-        Task<bool> Check() { Interlocked.Increment(ref reads); return release.Task; }
+        Task<bool> Check()
+        { Interlocked.Increment(ref reads); return release.Task; }
 
         // When twenty callers arrive while it is in flight
         var calls = Enumerable.Range(0, 20).Select(_ => cache.IsReadyAsync(Check)).ToArray();

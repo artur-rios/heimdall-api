@@ -23,7 +23,8 @@ public class GetPersonByIdQueryHandlerTests
         Email = $"user-{id}@test.local",
         RoleId = (long)Roles.User,
         IsDeleted = isDeleted,
-        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id,
+        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person ScopeAdmin(long id, params Scope[] ownedScopes) => new()
@@ -73,7 +74,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = target.PublicId,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -97,7 +100,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.User
+            Id = target.PublicId,
+            ActingPersonId = target.PublicId,
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -118,7 +123,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.User
+            Id = target.PublicId,
+            ActingPersonId = actor.PublicId,
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -139,7 +146,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            Id = target.PublicId,
+            ActingPersonId = actor.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -163,7 +172,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            Id = target.PublicId,
+            ActingPersonId = actor.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -185,7 +196,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            Id = target.PublicId,
+            ActingPersonId = actor.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -206,7 +219,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            Id = target.PublicId,
+            ActingPersonId = actor.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -229,7 +244,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            Id = target.PublicId,
+            ActingPersonId = actor.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -250,7 +267,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = target.PublicId,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -271,7 +290,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            Id = target.PublicId,
+            ActingPersonId = target.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -292,7 +313,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            Id = target.PublicId,
+            ActingPersonId = actor.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -310,7 +333,9 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = Guid.NewGuid(), ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = Guid.NewGuid(),
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -330,8 +355,10 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, IncludeDeleted = false,
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = target.PublicId,
+            IncludeDeleted = false,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -351,8 +378,10 @@ public class GetPersonByIdQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, IncludeDeleted = true,
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            Id = target.PublicId,
+            IncludeDeleted = true,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
@@ -368,7 +397,10 @@ public class GetPersonByIdQueryHandlerTests
         var target = User(10, scope);
         target.TwoFactorAuth = new TwoFactorAuth
         {
-            Id = 1, PersonId = target.Id, AppEnabled = true, IsActive = true
+            Id = 1,
+            PersonId = target.Id,
+            AppEnabled = true,
+            IsActive = true
         };
         var repository = await RepositoryWith(target);
         var handler = new GetPersonByIdQueryHandler(repository);
@@ -376,7 +408,9 @@ public class GetPersonByIdQueryHandlerTests
         // When the person reads themselves
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.User
+            Id = target.PublicId,
+            ActingPersonId = target.PublicId,
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -392,7 +426,10 @@ public class GetPersonByIdQueryHandlerTests
         var target = User(10, scope);
         target.TwoFactorAuth = new TwoFactorAuth
         {
-            Id = 1, PersonId = target.Id, AppEnabled = true, IsActive = false
+            Id = 1,
+            PersonId = target.Id,
+            AppEnabled = true,
+            IsActive = false
         };
         var repository = await RepositoryWith(target);
         var handler = new GetPersonByIdQueryHandler(repository);
@@ -400,7 +437,9 @@ public class GetPersonByIdQueryHandlerTests
         // When the person reads themselves
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.User
+            Id = target.PublicId,
+            ActingPersonId = target.PublicId,
+            ActingRole = (int)Roles.User
         });
 
         // Then — the flag tracks IsActive, not the mere existence of a row
@@ -420,7 +459,9 @@ public class GetPersonByIdQueryHandlerTests
         // When the person reads themselves
         var output = await handler.HandleAsync(new GetPersonByIdQuery
         {
-            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.User
+            Id = target.PublicId,
+            ActingPersonId = target.PublicId,
+            ActingRole = (int)Roles.User
         });
 
         // Then

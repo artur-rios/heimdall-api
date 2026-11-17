@@ -27,17 +27,17 @@ public class ListAuditLogQueryHandlerTests
         Guid? target = null,
         bool succeeded = true,
         string? failureReason = null) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        CreatedAt = createdAt,
-        Action = action,
-        ActorPersonId = actor,
-        ActorRole = actorRole,
-        TargetId = target,
-        Succeeded = succeeded,
-        FailureReason = failureReason
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            CreatedAt = createdAt,
+            Action = action,
+            ActorPersonId = actor,
+            ActorRole = actorRole,
+            TargetId = target,
+            Succeeded = succeeded,
+            FailureReason = failureReason
+        };
 
     private static async Task<AsyncFakeRepository<AuditLog, long>> EntriesWith(params AuditLog[] entries)
     {

@@ -41,8 +41,12 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
         await using var context = db.CreateContext();
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
-            InvitedByPersonId = inviter?.Id, CreatedAt = DateTime.UtcNow, ExpiresAt = DateTime.UtcNow.AddDays(7)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = invitee.Id,
+            InvitedByPersonId = inviter?.Id,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
         };
         context.ScopeOwnerInvitations.Add(invitation);
         await context.SaveChangesAsync();
@@ -202,7 +206,9 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
         // When
         var output = await handler.HandleAsync(new AcceptScopeOwnerInvitationCommand
         {
-            InvitationId = invitation.PublicId, ActingPersonId = invitee.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            InvitationId = invitation.PublicId,
+            ActingPersonId = invitee.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then
@@ -232,7 +238,9 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
         // When
         var output = await handler.HandleAsync(new AcceptScopeOwnerInvitationCommand
         {
-            InvitationId = invitation.PublicId, ActingPersonId = invitee.PublicId, ActingRole = (int)Roles.ScopeAdmin
+            InvitationId = invitation.PublicId,
+            ActingPersonId = invitee.PublicId,
+            ActingRole = (int)Roles.ScopeAdmin
         });
 
         // Then

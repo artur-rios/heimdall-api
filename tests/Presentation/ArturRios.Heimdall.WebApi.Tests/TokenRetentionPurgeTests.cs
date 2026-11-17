@@ -1,7 +1,7 @@
 using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Handlers;
-using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Retention;
@@ -72,15 +72,20 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
 
         var person = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Backlog Subject", Email = $"backlog-{Guid.NewGuid():N}@functional.test",
-            RoleId = (long)Roles.User, EmailVerified = true
+            PublicId = Guid.NewGuid(),
+            Name = "Backlog Subject",
+            Email = $"backlog-{Guid.NewGuid():N}@functional.test",
+            RoleId = (long)Roles.User,
+            EmailVerified = true
         };
         context.Persons.Add(person);
         await context.SaveChangesAsync();
 
         context.PasswordResetTokens.AddRange(Enumerable.Range(0, 7).Select(i => new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddDays(-30 - i)
+            PersonId = person.Id,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTime.UtcNow.AddDays(-30 - i)
         }));
         await context.SaveChangesAsync();
 
@@ -118,15 +123,21 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
 
         var expiredReset = new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = longExpired
+            PersonId = person.Id,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = longExpired
         };
         var liveReset = new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = live
+            PersonId = person.Id,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = live
         };
         var expiredVerification = new EmailVerificationToken
         {
-            PersonId = person.Id, TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = longExpired
+            PersonId = person.Id,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = longExpired
         };
 
         var twoFactor = new TwoFactorAuth
@@ -160,9 +171,14 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
 
         PendingRegistration Pending(DateTime expiresAt) => new()
         {
-            ScopeId = scope.Id, Name = "Pending", Email = $"pending-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1], Salt = [2], TokenHash = Guid.NewGuid().ToString("N"),
-            ExpiresAt = expiresAt, CreatedAt = expiresAt.AddHours(-24)
+            ScopeId = scope.Id,
+            Name = "Pending",
+            Email = $"pending-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1],
+            Salt = [2],
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = expiresAt,
+            CreatedAt = expiresAt.AddHours(-24)
         };
 
         var expiredPending = Pending(longExpired);
@@ -239,11 +255,13 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
 
         var expired = new GoogleIdTokenUse
         {
-            Id = GoogleIdTokenUse.KeyOf(Guid.NewGuid().ToString("N"), "unused"), ExpiresAt = DateTime.UtcNow.AddDays(-30)
+            Id = GoogleIdTokenUse.KeyOf(Guid.NewGuid().ToString("N"), "unused"),
+            ExpiresAt = DateTime.UtcNow.AddDays(-30)
         };
         var live = new GoogleIdTokenUse
         {
-            Id = GoogleIdTokenUse.KeyOf(Guid.NewGuid().ToString("N"), "unused"), ExpiresAt = DateTime.UtcNow.AddMinutes(30)
+            Id = GoogleIdTokenUse.KeyOf(Guid.NewGuid().ToString("N"), "unused"),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(30)
         };
 
         context.GoogleIdTokenUses.AddRange(expired, live);
@@ -334,27 +352,42 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         context.Scopes.Add(scope);
         var invitee = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Invitee", Email = $"invitee-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.ScopeAdmin
+            PublicId = Guid.NewGuid(),
+            Name = "Invitee",
+            Email = $"invitee-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1],
+            Salt = [2],
+            RoleId = (long)Roles.ScopeAdmin
         };
         context.Persons.Add(invitee);
         await context.SaveChangesAsync();
         var now = DateTime.UtcNow;
         var old = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
-            CreatedAt = now.AddDays(-100), ExpiresAt = now.AddDays(-93), EndedAt = now.AddDays(-91),
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = invitee.Id,
+            CreatedAt = now.AddDays(-100),
+            ExpiresAt = now.AddDays(-93),
+            EndedAt = now.AddDays(-91),
             Outcome = ScopeOwnerInvitationOutcomes.Declined
         };
         var lapsed = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
-            CreatedAt = now.AddDays(-98), ExpiresAt = now.AddDays(-91)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = invitee.Id,
+            CreatedAt = now.AddDays(-98),
+            ExpiresAt = now.AddDays(-91)
         };
         var recent = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
-            CreatedAt = now.AddDays(-12), ExpiresAt = now.AddDays(-5), EndedAt = now.AddDays(-10),
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = invitee.Id,
+            CreatedAt = now.AddDays(-12),
+            ExpiresAt = now.AddDays(-5),
+            EndedAt = now.AddDays(-10),
             Outcome = ScopeOwnerInvitationOutcomes.Withdrawn
         };
         context.ScopeOwnerInvitations.AddRange(old, lapsed, recent);

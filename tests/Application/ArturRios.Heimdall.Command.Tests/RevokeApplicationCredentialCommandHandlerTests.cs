@@ -30,13 +30,22 @@ public class RevokeApplicationCredentialCommandHandlerTests
         var scope = new Scope { Id = id, PublicId = Guid.NewGuid(), Name = "Acme" };
         var owner = new Person
         {
-            Id = id, PublicId = Guid.NewGuid(), Name = "Owner", Email = $"owner-{id}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id, Scope = scope }]
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = "Owner",
+            Email = $"owner-{id}@test.local",
+            RoleId = (long)Roles.ScopeAdmin,
+            ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id, Scope = scope }]
         };
         var application = new Application
         {
-            Id = id, PublicId = Guid.NewGuid(), Name = "Billing", ScopeId = scope.Id, Scope = scope,
-            OwnerId = owner.Id, Owner = owner
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = "Billing",
+            ScopeId = scope.Id,
+            Scope = scope,
+            OwnerId = owner.Id,
+            Owner = owner
         };
         await _applications.CreateAsync(application);
         return application;
@@ -44,10 +53,13 @@ public class RevokeApplicationCredentialCommandHandlerTests
 
     private static RevokeApplicationCredentialCommand Command(
         Application application, Guid credentialId, int role = (int)Roles.SystemAdmin, Guid? actor = null) => new()
-    {
-        ScopeId = application.Scope.PublicId, Id = application.PublicId, CredentialId = credentialId,
-        ActingRole = role, ActingPersonId = actor ?? Guid.NewGuid()
-    };
+        {
+            ScopeId = application.Scope.PublicId,
+            Id = application.PublicId,
+            CredentialId = credentialId,
+            ActingRole = role,
+            ActingPersonId = actor ?? Guid.NewGuid()
+        };
 
     [UnitFact]
     public async Task GivenALiveCredential_WhenRevoking_ThenRevokedAtIsStampedAndItIsTheTarget()

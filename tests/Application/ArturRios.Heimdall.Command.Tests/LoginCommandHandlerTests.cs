@@ -33,16 +33,16 @@ public class LoginCommandHandlerTests
 
     private static Person Person(long id, string email, Roles role, bool isDeleted = false,
         string password = Password) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        Name = $"person-{id}",
-        Email = email,
-        PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt, PasswordHashing.Configuration),
-        Salt = salt,
-        RoleId = (long)role,
-        IsDeleted = isDeleted
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = $"person-{id}",
+            Email = email,
+            PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt, PasswordHashing.Configuration),
+            Salt = salt,
+            RoleId = (long)role,
+            IsDeleted = isDeleted
+        };
 
     private static Person User(long id, string email, Scope scope, bool isDeleted = false,
         string password = Password)
@@ -521,7 +521,10 @@ public class LoginCommandHandlerTests
         var fixture = FixtureFor(await PersonsWith(person));
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = true, EmailEnabled = true
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = true,
+            EmailEnabled = true
         });
 
         // When
@@ -558,7 +561,10 @@ public class LoginCommandHandlerTests
         var fixture = FixtureFor(await PersonsWith(person));
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = true, EmailEnabled = false
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = true,
+            EmailEnabled = false
         });
 
         // When
@@ -578,7 +584,10 @@ public class LoginCommandHandlerTests
         var fixture = FixtureFor(await PersonsWith(person));
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = false,
+            EmailEnabled = true
         };
         await fixture.TwoFactorAuths.CreateAsync(twoFactorAuth);
         var stale = new TwoFactorEmailCode
@@ -631,7 +640,9 @@ public class LoginCommandHandlerTests
         var fixture = FixtureFor(await PersonsWith(person));
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = false, AppEnabled = true
+            PersonId = person.Id,
+            IsActive = false,
+            AppEnabled = true
         });
 
         // When
@@ -746,7 +757,10 @@ public class LoginCommandHandlerTests
         var fixture = FixtureFor(await PersonsWith(person));
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = false,
+            EmailEnabled = true
         });
 
         // When
@@ -806,7 +820,9 @@ public class LoginCommandHandlerTests
         var fixture = FixtureFor(await PersonsWith(person));
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = true
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = true
         });
 
         // When

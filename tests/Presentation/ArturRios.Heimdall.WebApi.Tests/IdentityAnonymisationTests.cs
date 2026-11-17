@@ -127,9 +127,14 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
             .Select(i => DeletedPerson(DateTime.UtcNow.AddDays(-200 - i), DeletionKinds.Administrative)));
         context.GoogleUsers.AddRange(Enumerable.Range(0, 5).Select(i => new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = Guid.NewGuid().ToString("N"), Name = "Grace",
-            Email = $"backlog-{Guid.NewGuid():N}@functional.test", ScopeId = scope.Id, IsDeleted = true,
-            DeletedAt = DateTime.UtcNow.AddDays(-200 - i), DeletionKind = (int)DeletionKinds.Administrative
+            PublicId = Guid.NewGuid(),
+            GoogleId = Guid.NewGuid().ToString("N"),
+            Name = "Grace",
+            Email = $"backlog-{Guid.NewGuid():N}@functional.test",
+            ScopeId = scope.Id,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow.AddDays(-200 - i),
+            DeletionKind = (int)DeletionKinds.Administrative
         }));
         await context.SaveChangesAsync();
 
@@ -168,17 +173,27 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
 
         var firstGoogleUser = new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = Guid.NewGuid().ToString("N"), Name = "Ada",
-            Email = $"g1-{Guid.NewGuid():N}@functional.test", ScopeId = scope.Id, IsDeleted = true,
+            PublicId = Guid.NewGuid(),
+            GoogleId = Guid.NewGuid().ToString("N"),
+            Name = "Ada",
+            Email = $"g1-{Guid.NewGuid():N}@functional.test",
+            ScopeId = scope.Id,
+            IsDeleted = true,
             ProfilePictureUrl = "https://example.invalid/photo.jpg",
-            DeletedAt = DateTime.UtcNow.AddDays(-120), DeletionKind = (int)DeletionKinds.Administrative
+            DeletedAt = DateTime.UtcNow.AddDays(-120),
+            DeletionKind = (int)DeletionKinds.Administrative
         };
         var secondGoogleUser = new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = Guid.NewGuid().ToString("N"), Name = "Grace",
-            Email = $"g2-{Guid.NewGuid():N}@functional.test", ScopeId = scope.Id, IsDeleted = true,
+            PublicId = Guid.NewGuid(),
+            GoogleId = Guid.NewGuid().ToString("N"),
+            Name = "Grace",
+            Email = $"g2-{Guid.NewGuid():N}@functional.test",
+            ScopeId = scope.Id,
+            IsDeleted = true,
             ProfilePictureUrl = "https://example.invalid/photo2.jpg",
-            DeletedAt = DateTime.UtcNow.AddDays(-120), DeletionKind = (int)DeletionKinds.Administrative
+            DeletedAt = DateTime.UtcNow.AddDays(-120),
+            DeletionKind = (int)DeletionKinds.Administrative
         };
 
         context.Persons.AddRange(administrative, requested, stillInsideItsWindow);
@@ -187,12 +202,16 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
 
         context.PasswordResetTokens.Add(new PasswordResetToken
         {
-            PersonId = administrative.Id, TokenHash = Guid.NewGuid().ToString("N"),
+            PersonId = administrative.Id,
+            TokenHash = Guid.NewGuid().ToString("N"),
             ExpiresAt = DateTime.UtcNow.AddDays(1)
         });
         context.TwoFactorAuths.Add(new TwoFactorAuth
         {
-            PersonId = administrative.Id, AppEnabled = true, IsActive = true, TotpSecretEncrypted = [7, 7, 7]
+            PersonId = administrative.Id,
+            AppEnabled = true,
+            IsActive = true,
+            TotpSecretEncrypted = [7, 7, 7]
         });
         await context.SaveChangesAsync();
 
@@ -322,7 +341,9 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         // When
         var output = await handler.HandleAsync(new ReapplyErasuresCommand
         {
-            SubjectIds = [restored.PublicId], ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+            SubjectIds = [restored.PublicId],
+            ActingRole = (int)Roles.SystemAdmin,
+            ActingPersonId = Guid.NewGuid()
         });
 
         // Then
@@ -346,20 +367,31 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         person.RoleId = (long)Roles.ScopeAdmin;
         var other = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Invitee", Email = $"invitee-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.ScopeAdmin
+            PublicId = Guid.NewGuid(),
+            Name = "Invitee",
+            Email = $"invitee-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1],
+            Salt = [2],
+            RoleId = (long)Roles.ScopeAdmin
         };
         context.Persons.AddRange(person, other);
         await context.SaveChangesAsync();
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2),
+            ExpiresAt = DateTime.UtcNow.AddDays(5)
         };
         var sent = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = other.Id, InvitedByPersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = other.Id,
+            InvitedByPersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2),
+            ExpiresAt = DateTime.UtcNow.AddDays(5)
         };
         context.ScopeOwnerInvitations.AddRange(invitation, sent);
         await context.SaveChangesAsync();
@@ -391,20 +423,31 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         person.RoleId = (long)Roles.ScopeAdmin;
         var other = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Invitee", Email = $"invitee-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.ScopeAdmin
+            PublicId = Guid.NewGuid(),
+            Name = "Invitee",
+            Email = $"invitee-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1],
+            Salt = [2],
+            RoleId = (long)Roles.ScopeAdmin
         };
         context.Persons.AddRange(person, other);
         await context.SaveChangesAsync();
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2),
+            ExpiresAt = DateTime.UtcNow.AddDays(5)
         };
         var sent = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = other.Id, InvitedByPersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = other.Id,
+            InvitedByPersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2),
+            ExpiresAt = DateTime.UtcNow.AddDays(5)
         };
         context.ScopeOwnerInvitations.AddRange(invitation, sent);
         await context.SaveChangesAsync();
@@ -437,20 +480,31 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         restored.RoleId = (long)Roles.ScopeAdmin;
         var other = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Invitee", Email = $"invitee-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.ScopeAdmin
+            PublicId = Guid.NewGuid(),
+            Name = "Invitee",
+            Email = $"invitee-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1],
+            Salt = [2],
+            RoleId = (long)Roles.ScopeAdmin
         };
         context.Persons.AddRange(restored, other);
         await context.SaveChangesAsync();
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = restored.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = restored.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2),
+            ExpiresAt = DateTime.UtcNow.AddDays(5)
         };
         var sent = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = other.Id,
-            InvitedByPersonId = restored.Id, CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = other.Id,
+            InvitedByPersonId = restored.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2),
+            ExpiresAt = DateTime.UtcNow.AddDays(5)
         };
         context.ScopeOwnerInvitations.AddRange(invitation, sent);
         await context.SaveChangesAsync();
@@ -458,7 +512,9 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         // When
         var output = await ReapplyHandler(context).HandleAsync(new ReapplyErasuresCommand
         {
-            SubjectIds = [restored.PublicId], ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+            SubjectIds = [restored.PublicId],
+            ActingRole = (int)Roles.SystemAdmin,
+            ActingPersonId = Guid.NewGuid()
         });
 
         // Then

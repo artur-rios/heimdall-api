@@ -24,18 +24,18 @@ public class ListScopePermissionsQueryHandlerTests
     private static ScopePermission Permission(
         long id, Scope scope, string? name = null, bool isDeleted = false,
         bool includeAsJwtClaim = false, string? description = null) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        Name = name ?? $"permission-{id}",
-        Description = description ?? $"desc-{id}",
-        IncludeAsJwtClaim = includeAsJwtClaim,
-        IsDeleted = isDeleted,
-        ScopeId = scope.Id,
-        Scope = scope,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = name ?? $"permission-{id}",
+            Description = description ?? $"desc-{id}",
+            IncludeAsJwtClaim = includeAsJwtClaim,
+            IsDeleted = isDeleted,
+            ScopeId = scope.Id,
+            Scope = scope,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
     private static IScopeOwnershipChecker Ownership(bool allowed)
     {
@@ -73,13 +73,13 @@ public class ListScopePermissionsQueryHandlerTests
 
     private static ListScopePermissionsQuery QueryFor(
         Scope scope, int actingRole, Guid actingPersonId, int pageSize = 10) => new()
-    {
-        ScopeId = scope.PublicId,
-        PageNumber = 1,
-        PageSize = pageSize,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scope.PublicId,
+            PageNumber = 1,
+            PageSize = pageSize,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingListScopePermissions_ThenEveryPermissionInTheScopeIsReturned()

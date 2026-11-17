@@ -11,7 +11,10 @@ public class RegisterCommandValidatorTests
 {
     private static RegisterCommand Valid() => new()
     {
-        Name = "New Person", Email = "new@test.local", Password = "12345678", ScopeId = Guid.NewGuid()
+        Name = "New Person",
+        Email = "new@test.local",
+        Password = "12345678",
+        ScopeId = Guid.NewGuid()
     };
 
     private static IEnumerable<string> ErrorsFor(RegisterCommand command) =>

@@ -84,7 +84,9 @@ public class PendingRegistrationClaimRaceTests(PostgresFixture db)
         await using var context = db.CreateContext();
         var scope = new Scope
         {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", SelfRegistrationEnabled = true
+            PublicId = Guid.NewGuid(),
+            Name = $"scope-{Guid.NewGuid():N}",
+            SelfRegistrationEnabled = true
         };
         context.Scopes.Add(scope);
         await context.SaveChangesAsync();

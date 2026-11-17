@@ -10,7 +10,9 @@ public class CreateUserCommandValidatorTests
 {
     private static CreateUserCommand Valid() => new()
     {
-        Name = "User", Email = "user@test.local", Password = "Str0ngPass!"
+        Name = "User",
+        Email = "user@test.local",
+        Password = "Str0ngPass!"
     };
 
     [UnitFact]

@@ -127,7 +127,9 @@ public class RegenerateRecoveryCodesCommandHandler(
         var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
             new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = recoveryCode.CodeHash, Used = false
+                TwoFactorAuthId = twoFactorAuth.Id,
+                CodeHash = recoveryCode.CodeHash,
+                Used = false
             }), cancellationToken);
 
         if (!creation.Success)

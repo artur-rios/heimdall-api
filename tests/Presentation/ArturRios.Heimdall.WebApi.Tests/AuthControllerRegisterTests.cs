@@ -233,9 +233,14 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
             context.PendingRegistrations.AddRange(Enumerable.Range(0, RegistrationOptions.DefaultMaxPendingPerScope)
                 .Select(i => new PendingRegistration
                 {
-                    ScopeId = full.Id, Name = "Waiting", Email = UniqueEmail($"waiting{i}"), PasswordHash = [1],
-                    Salt = [2], TokenHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
-                    ExpiresAt = DateTime.UtcNow.AddHours(12), CreatedAt = DateTime.UtcNow
+                    ScopeId = full.Id,
+                    Name = "Waiting",
+                    Email = UniqueEmail($"waiting{i}"),
+                    PasswordHash = [1],
+                    Salt = [2],
+                    TokenHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+                    ExpiresAt = DateTime.UtcNow.AddHours(12),
+                    CreatedAt = DateTime.UtcNow
                 }));
             await context.SaveChangesAsync();
         }

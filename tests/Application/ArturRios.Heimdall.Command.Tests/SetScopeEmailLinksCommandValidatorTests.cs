@@ -110,7 +110,8 @@ public class SetScopeEmailLinksCommandValidatorTests
     {
         var result = new SetScopeEmailLinksCommandValidator().Validate(new SetScopeEmailLinksCommand
         {
-            EmailVerificationUrl = "https://app.test/verify-email", PasswordResetUrl = "/unix/path"
+            EmailVerificationUrl = "https://app.test/verify-email",
+            PasswordResetUrl = "/unix/path"
         });
 
         Assert.False(result.IsValid);

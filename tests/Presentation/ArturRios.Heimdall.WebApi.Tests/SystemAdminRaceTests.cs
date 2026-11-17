@@ -68,7 +68,9 @@ public class SystemAdminRaceTests(PostgresFixture db)
 
     private static DeletePersonCommand Deletion(Person target, Person by) => new()
     {
-        Id = target.PublicId, ActingRole = (int)Roles.SystemAdmin, ActingPersonId = by.PublicId
+        Id = target.PublicId,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = by.PublicId
     };
 
     private static DeletePersonCommandHandler DeletePerson(AppDbContext context)

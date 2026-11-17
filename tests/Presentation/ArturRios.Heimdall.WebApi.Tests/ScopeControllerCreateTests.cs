@@ -135,7 +135,9 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
             "/api/scopes",
             new CreateScopeCommand
             {
-                Name = UniqueName(), Description = new string('x', 501), OwnerIds = [owner.PublicId]
+                Name = UniqueName(),
+                Description = new string('x', 501),
+                OwnerIds = [owner.PublicId]
             });
 
         // Then

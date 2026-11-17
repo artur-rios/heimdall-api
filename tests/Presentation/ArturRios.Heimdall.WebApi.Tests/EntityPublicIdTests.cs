@@ -97,7 +97,10 @@ public class EntityPublicIdTests(PostgresFixture fixture)
 
         var application = new Application
         {
-            PublicId = Guid.NewGuid(), Name = Unique("entity-public-id"), ScopeId = scope.Id, OwnerId = owner.Id
+            PublicId = Guid.NewGuid(),
+            Name = Unique("entity-public-id"),
+            ScopeId = scope.Id,
+            OwnerId = owner.Id
         };
         context.Applications.Add(application);
         await context.SaveChangesAsync();
@@ -130,7 +133,9 @@ public class EntityPublicIdTests(PostgresFixture fixture)
         await using var context = fixture.CreateContext();
         var permission = new ScopePermission
         {
-            PublicId = Guid.NewGuid(), Name = Unique("entity-public-id"), ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            Name = Unique("entity-public-id"),
+            ScopeId = scope.Id
         };
         context.ScopePermissions.Add(permission);
         await context.SaveChangesAsync();

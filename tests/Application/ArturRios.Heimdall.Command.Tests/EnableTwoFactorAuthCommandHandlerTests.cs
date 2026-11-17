@@ -198,7 +198,9 @@ public class EnableTwoFactorAuthCommandHandlerTests
         var fixture = await FixtureAsync();
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = fixture.Person.Id, IsActive = true, AppEnabled = true
+            PersonId = fixture.Person.Id,
+            IsActive = true,
+            AppEnabled = true
         });
 
         // When
@@ -222,7 +224,9 @@ public class EnableTwoFactorAuthCommandHandlerTests
         // When
         var output = await fixture.Handler().HandleAsync(new EnableTwoFactorAuthCommand
         {
-            Methods = ["App"], ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.User
+            Methods = ["App"],
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.User
         });
 
         // Then
@@ -299,7 +303,9 @@ public class EnableTwoFactorAuthCommandHandlerTests
         var fixture = await FixtureAsync();
         var pending = new TwoFactorAuth
         {
-            PersonId = fixture.Person.Id, IsActive = false, EmailEnabled = true
+            PersonId = fixture.Person.Id,
+            IsActive = false,
+            EmailEnabled = true
         };
         await fixture.TwoFactorAuths.CreateAsync(pending);
         var outstanding = new TwoFactorEmailCode
@@ -333,7 +339,9 @@ public class EnableTwoFactorAuthCommandHandlerTests
         var fixture = await FixtureAsync();
         var pending = new TwoFactorAuth
         {
-            PersonId = fixture.Person.Id, IsActive = false, EmailEnabled = true
+            PersonId = fixture.Person.Id,
+            IsActive = false,
+            EmailEnabled = true
         };
         await fixture.TwoFactorAuths.CreateAsync(pending);
         var outstanding = new TwoFactorEmailCode

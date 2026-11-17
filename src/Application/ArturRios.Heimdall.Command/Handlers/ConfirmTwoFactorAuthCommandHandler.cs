@@ -179,7 +179,8 @@ public class ConfirmTwoFactorAuthCommandHandler(
         return output
             .WithData(new ConfirmTwoFactorAuthCommandOutput
             {
-                Enabled = true, RecoveryCodes = [.. recoveryCodes.Select(issued => issued.Code)]
+                Enabled = true,
+                RecoveryCodes = [.. recoveryCodes.Select(issued => issued.Code)]
             })
             .WithMessage(TwoFactorMessages.SetupConfirmed);
     }
@@ -227,7 +228,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
         var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
             new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuthId, CodeHash = recoveryCode.CodeHash, Used = false
+                TwoFactorAuthId = twoFactorAuthId,
+                CodeHash = recoveryCode.CodeHash,
+                Used = false
             }));
 
         return creation.Success ? null : creation.Errors;

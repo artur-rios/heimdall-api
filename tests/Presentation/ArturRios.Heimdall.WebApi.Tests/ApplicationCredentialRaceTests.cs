@@ -51,7 +51,9 @@ public class ApplicationCredentialRaceTests(PostgresFixture db)
         // When
         var output = await handler.HandleAsync(new IssueApplicationTokenCommand
         {
-            ApplicationId = application.PublicId, ScopeId = scope.PublicId, Secret = secret
+            ApplicationId = application.PublicId,
+            ScopeId = scope.PublicId,
+            Secret = secret
         });
 
         // Then
@@ -76,8 +78,11 @@ public class ApplicationCredentialRaceTests(PostgresFixture db)
         // When
         var output = await handler.HandleAsync(new RevokeApplicationCredentialCommand
         {
-            ScopeId = scope.PublicId, Id = application.PublicId, CredentialId = credential.PublicId,
-            ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+            ScopeId = scope.PublicId,
+            Id = application.PublicId,
+            CredentialId = credential.PublicId,
+            ActingRole = (int)Roles.SystemAdmin,
+            ActingPersonId = Guid.NewGuid()
         });
 
         // Then
