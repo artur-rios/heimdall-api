@@ -1,16 +1,12 @@
 using System.Globalization;
-using System.Net.Mime;
 using System.Reflection;
 using ArturRios.Heimdall.Domain.Enums;
-using ArturRios.Output;
 using ArturRios.Util.WebApi.Security.Attributes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
-using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.Swagger;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -114,7 +110,7 @@ public static class SwaggerConfiguration
 
         options.RequestBodyFilter<RequiredRequestBodyFilter>();
         options.OperationFilter<ResponseMediaTypeFilter>();
-        options.OperationFilter<RateLimitRejectionResponseFilter>();
+        options.OperationFilter<ErrorResponseFilter>();
         options.SchemaFilter<NullableReferencePropertySchemaFilter>();
         // After IncludeXmlComments, whose filter writes the descriptions this one takes back off.
         options.SchemaFilter<ReferenceDescriptionSchemaFilter>();
@@ -132,8 +128,9 @@ public static class SwaggerConfiguration
 }
 
 /// <summary>
-///     Marks each operation with the security it actually requires, and documents the rejections
-///     that security produces.
+///     Marks each operation with the security it actually requires. The rejections that security
+///     produces, 401 and 403, are documented with the other error responses by
+///     <see cref="ErrorResponseFilter" />.
 ///
 ///     Authentication here is Heimdall's own — <c>AllowAnonymousAttribute</c> and
 ///     <c>RoleRequirementAttribute</c> from ArturRios.Util.WebApi, not ASP.NET Core's — so
@@ -215,12 +212,6 @@ public sealed class SecurityDocumentFilter : IDocumentFilter
             }
         ];
 
-        operation.Responses ??= [];
-
-        operation.Responses.TryAdd(
-            "401",
-            new OpenApiResponse { Description = "The token is missing, malformed, expired, or is a 2FA challenge token." });
-
         var roles = attributes
             .OfType<RoleRequirementAttribute>()
             .SelectMany(RoleNames)
@@ -235,10 +226,6 @@ public sealed class SecurityDocumentFilter : IDocumentFilter
 
             return;
         }
-
-        operation.Responses.TryAdd(
-            "403",
-            new OpenApiResponse { Description = "The token is valid but the caller does not hold a required role." });
 
         operation.Description = Append(operation.Description, $"**Requires role:** {string.Join(" or ", roles)}.");
     }
@@ -345,60 +332,6 @@ public sealed class ResponseMediaTypeFilter : IOperationFilter
 
             content.Remove(TextPlain);
         }
-    }
-}
-
-/// <summary>
-///     Documents the <c>429 Too Many Requests</c> the rate limiter answers on every operation that
-///     carries <c>[EnableRateLimiting]</c>.
-/// </summary>
-/// <remarks>
-///     The rejection is written by <c>RateLimitingConfiguration</c>'s <c>OnRejected</c>, ahead of the
-///     action, with <c>WriteAsJsonAsync</c>: always <c>application/json</c>, whatever the request
-///     accepts, a <c>DataOutput&lt;object?&gt;</c> envelope whose <c>data</c> is null and whose
-///     error is "Too many requests.", and a <c>Retry-After</c> header in seconds. ApiExplorer knows
-///     nothing of it, since no action returns it. The attribute is what puts an operation under a
-///     limit — the endpoint policy, and for the account-creation policy the global limiter too — so
-///     it is what this reads. A 429 an action answers itself (an email budget) is a handler failure
-///     and not this one; it carries the same envelope with a null <c>data</c>.
-/// </remarks>
-public sealed class RateLimitRejectionResponseFilter : IOperationFilter
-{
-    private const string TooManyRequests = "429";
-
-    public void Apply(OpenApiOperation operation, OperationFilterContext context)
-    {
-        var method = context.MethodInfo;
-
-        if (method is null
-            || method.GetCustomAttribute<DisableRateLimitingAttribute>() is not null
-            || (method.GetCustomAttribute<EnableRateLimitingAttribute>()
-                ?? method.DeclaringType?.GetCustomAttribute<EnableRateLimitingAttribute>()) is null)
-        {
-            return;
-        }
-
-        operation.Responses ??= [];
-
-        operation.Responses.TryAdd(TooManyRequests, new OpenApiResponse
-        {
-            Description = "Too many requests: the caller's budget for this operation is spent until the window ends.",
-            Headers = new Dictionary<string, IOpenApiHeader>
-            {
-                [HeaderNames.RetryAfter] = new OpenApiHeader
-                {
-                    Description = "Seconds to wait before trying again.",
-                    Schema = new OpenApiSchema { Type = JsonSchemaType.Integer }
-                }
-            },
-            Content = new Dictionary<string, IOpenApiMediaType>
-            {
-                [MediaTypeNames.Application.Json] = new OpenApiMediaType
-                {
-                    Schema = context.SchemaGenerator.GenerateSchema(typeof(DataOutput<object>), context.SchemaRepository)
-                }
-            }
-        });
     }
 }
 

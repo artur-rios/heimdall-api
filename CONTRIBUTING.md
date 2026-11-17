@@ -182,6 +182,12 @@ The `check` check ([`ci/check.sh`](./ci/check.sh)) fails the build if it is out 
 otherwise a controller change would keep being published with the old document, since heimdall-docs
 publishes the committed file and nothing else regenerates it.
 
+The script first rewrites `src/Presentation/ArturRios.Heimdall.WebApi/Documentation/error-responses.json`:
+the error statuses each handler can answer, which `scripts/error_responses.py` reads from the source
+(the messages a handler and the code it reaches fail with, looked up in the status map its action
+passes). The Web API embeds that file and documents each operation's error responses from it, so a
+change to a handler, a validator or a status map changes the file too: commit it with the document.
+
 ## Documentation
 
 The documentation site lives in heimdall-docs, at <https://git.techcraftsmen.net/artur-rios/heimdall-docs> (its GitHub

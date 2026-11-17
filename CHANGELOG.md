@@ -75,6 +75,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Responses no longer list `text/plain` beside `application/json` and `text/json`. Only a bare string is written
     as `text/plain`, and no action returns one: an envelope asked for as `text/plain` is answered as
     `application/json`.
+- The OpenAPI document now lists every error response an operation can answer, each with the body the server
+  writes for it. The 401 and 403 it already listed had no body at all. Nothing changes on the wire, and a client
+  generated from the document decodes its success responses exactly as before.
+  - Handler errors: the statuses the handler can fail with, looked up in the status map its action passes, as the
+    server does. That is 400 (41 operations), 401 (13), 403 (47), 404 (51), 409 (33), 422 (1), 429 (5, the email
+    budgets of `POST /api/persons/{id}/verification-email` and `.../password-reset` among them) and 503 (23, a
+    transient database failure). The body is the operation's own envelope with `"data": null`.
+    `scripts/error_responses.py` reads them from the source into `Documentation/error-responses.json`, which the
+    Web API embeds, and `scripts/openapi.py` regenerates it with the document.
+  - A malformed body or query value: 400 from `MalformedRequestFilter` (49 operations).
+  - Authentication and authorization: the 401 on every authenticated operation (65), the role filter's 403 (50)
+    and, newly listed, the 403 the subject-rights guard answers on every authenticated operation that is not a
+    data-subject right (61). Their body is `ProcessOutput`, which has no `data`, so it is documented as a new
+    `ProcessOutput` schema. Where the handler answers the same status, the body is documented as the operation's
+    envelope, which both bodies match.
+  - `500 Internal Server Error` on every operation (78), as `application/json` `StringDataOutput`: the exception
+    middleware writes an empty `data`.
+  - The `503` of a saturated password-hash gate, with `Retry-After`, on the 15 operations whose handler derives a
+    password hash.
 
 ## [6.0.0] - 2026-11-10
 

@@ -28,6 +28,10 @@ silently published. It exits 1 when they differ.
 
 The comparison is over raw bytes, which is why docs/openapi/heimdall.json is pinned to LF in
 .gitattributes -- checked out as CRLF, it would differ from the generator's output on every run.
+
+Before anything is built, scripts/error_responses.py rewrites (or, under --check, checks) the catalog of
+the error statuses each handler can answer, which the Web API embeds and the document is built from: it
+is read from the source, which the build cannot do.
 """
 
 import argparse
@@ -36,6 +40,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+import error_responses
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATOR = REPO_ROOT / "tools/ArturRios.Heimdall.OpenApiGen"
@@ -100,6 +106,12 @@ def main():
     parser.add_argument("--check", action="store_true", help="fail if the committed document is out of date")
 
     arguments = parser.parse_args()
+
+    if arguments.check:
+        if error_responses.check() != 0:
+            return 1
+    else:
+        error_responses.write()
 
     if not arguments.no_build:
         build()

@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Controllers;
+using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.AspNetCore.Mvc;
@@ -342,8 +343,10 @@ public partial class OpenApiResponseContractTests
             .Order(StringComparer.Ordinal)
             .ToList();
 
+        // Handlers answer 503 too (a transient database failure, a saturated password-hash gate): the
+        // catalog's tests hold those. These are the actions that name the status themselves.
         Assert.Equal(["HealthCheck_Ready"], answering);
-        Assert.Equal(answering, documenting);
+        Assert.All(answering, operationId => Assert.Contains(operationId, documenting));
 
         foreach (var operationId in answering)
         {
@@ -361,8 +364,9 @@ public partial class OpenApiResponseContractTests
         using var document = LoadDocument();
         var operations = Operations(document).ToDictionary(operation => operation.OperationId);
 
-        Assert.Equal(["200"], Statuses(operations["HealthCheck_HelloWorld"].Operation));
-        Assert.Equal(["200", "503"], Statuses(operations["HealthCheck_Ready"].Operation));
+        // 500 is ExceptionMiddleware's, which every operation can meet.
+        Assert.Equal(["200", "500"], Statuses(operations["HealthCheck_HelloWorld"].Operation));
+        Assert.Equal(["200", "500", "503"], Statuses(operations["HealthCheck_Ready"].Operation));
 
         var unavailable = operations["HealthCheck_Ready"].Operation.GetProperty("responses").GetProperty("503");
 
@@ -392,15 +396,25 @@ public partial class OpenApiResponseContractTests
 
         Assert.NotEmpty(limited);
         Assert.Contains("SigningKeys_KeySet", limited);
-        Assert.Equal(limited, documenting);
+        // A handler can answer 429 as well (an email budget), so some operations document it unlimited.
+        Assert.All(limited, operationId => Assert.Contains(operationId, documenting));
 
         foreach (var operationId in limited)
         {
             var rejection = operations[operationId].Operation.GetProperty("responses").GetProperty("429");
 
-            // WriteAsJsonAsync, whatever the request accepts.
-            Assert.Equal(["application/json"], MediaTypes(rejection));
-            Assert.Equal("#/components/schemas/ObjectDataOutput", SchemaReference(rejection));
+            if (ErrorResponseCatalog.For(operationId).ContainsKey(429))
+            {
+                // The handler's envelope, data null, which the limiter's body validates against too.
+                Assert.Equal(EnvelopeOf(operations[operationId].Operation.GetProperty("responses")), SchemaReference(rejection));
+            }
+            else
+            {
+                // WriteAsJsonAsync, whatever the request accepts.
+                Assert.Equal(["application/json"], MediaTypes(rejection));
+                Assert.Equal("#/components/schemas/ObjectDataOutput", SchemaReference(rejection));
+            }
+
             Assert.Equal(
                 "integer",
                 rejection.GetProperty("headers").GetProperty("Retry-After").GetProperty("schema").GetProperty("type")

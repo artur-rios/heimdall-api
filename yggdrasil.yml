@@ -29,11 +29,13 @@ checks:
     image: mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2
     run: ci/check.sh
     # The generator and what it reflects over. They name the generator rather than all of tools/, because the
-    # load-test tool also lives there and cannot change what the published document says.
+    # load-test tool also lives there and cannot change what the published document says. error_responses.py
+    # derives the catalog of handler error statuses the document is built from.
     paths:
       - "src/**"
       - "tools/ArturRios.Heimdall.OpenApiGen/**"
       - "scripts/openapi.py"
+      - "scripts/error_responses.py"
       - "docs/openapi/**"
       - "ci/check.sh"
       - "ci/python.sh"

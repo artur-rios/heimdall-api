@@ -1,0 +1,964 @@
+{
+  "ApplicationCredential_Issue": {
+    "400": [
+      "ApplicationCredentialMessages.ExpiryNotInFuture",
+      "IValidator"
+    ],
+    "403": [
+      "ApplicationCredentialMessages.NotAuthorizedToManageCredentials"
+    ],
+    "404": [
+      "ApplicationMessages.ApplicationNotFound"
+    ],
+    "409": [
+      "ApplicationCredentialMessages.CredentialLimitReached"
+    ]
+  },
+  "ApplicationCredential_List": {
+    "403": [
+      "ApplicationCredentialMessages.NotAuthorizedToManageCredentials"
+    ],
+    "404": [
+      "ApplicationMessages.ApplicationNotFound"
+    ]
+  },
+  "ApplicationCredential_Revoke": {
+    "403": [
+      "ApplicationCredentialMessages.NotAuthorizedToManageCredentials"
+    ],
+    "404": [
+      "ApplicationCredentialMessages.CredentialNotFound",
+      "ApplicationMessages.ApplicationNotFound"
+    ],
+    "409": [
+      "ApplicationCredentialMessages.CredentialAlreadyRevoked"
+    ]
+  },
+  "ApplicationToken_IssueToken": {
+    "400": [
+      "ApplicationTokenMessages.ApplicationIdRequired",
+      "ApplicationTokenMessages.ScopeIdRequired",
+      "ApplicationTokenMessages.SecretRequired",
+      "ApplicationTokenMessages.SecretTooLong",
+      "IValidator"
+    ],
+    "401": [
+      "ApplicationTokenMessages.CredentialsNotAccepted"
+    ]
+  },
+  "ApplicationToken_Self": {
+    "401": [
+      "ApplicationTokenMessages.TokenNotAccepted"
+    ]
+  },
+  "Application_Create": {
+    "400": [
+      "ApplicationMessages.NameRequired",
+      "ApplicationMessages.NameTooLong",
+      "ApplicationMessages.OwnerNotValidForScope",
+      "ApplicationMessages.OwnerRequired",
+      "IValidator"
+    ],
+    "403": [
+      "ApplicationMessages.CannotSetAnotherOwner",
+      "ApplicationMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ApplicationMessages.ScopeNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Application_Delete": {
+    "403": [
+      "ApplicationMessages.NotAuthorizedToDeleteApplication"
+    ],
+    "404": [
+      "ApplicationMessages.ApplicationNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Application_GetById": {
+    "403": [
+      "ApplicationMessages.NotAuthorizedToViewApplication"
+    ],
+    "404": [
+      "ApplicationMessages.ApplicationNotFound"
+    ]
+  },
+  "Application_HardDelete": {
+    "404": [
+      "ApplicationMessages.ApplicationNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Application_List": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "ApplicationMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ApplicationMessages.ScopeNotFound"
+    ]
+  },
+  "Application_Update": {
+    "400": [
+      "ApplicationMessages.NameRequired",
+      "ApplicationMessages.NameTooLong",
+      "ApplicationMessages.OwnerNotValidForScope",
+      "ApplicationMessages.OwnerRequired",
+      "IValidator"
+    ],
+    "403": [
+      "ApplicationMessages.NotAuthorizedToUpdateApplication"
+    ],
+    "404": [
+      "ApplicationMessages.ApplicationNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Audit_List": {
+    "400": [
+      "IValidator"
+    ]
+  },
+  "Auth_ConfirmTwoFactorAuth": {
+    "401": [
+      "AuthMessages.PasswordOrCodeIncorrect"
+    ],
+    "404": [
+      "TwoFactorMessages.NoPendingSetup"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage",
+      "TwoFactorMessages.AlreadyActive"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Auth_DisableTwoFactorAuth": {
+    "401": [
+      "AuthMessages.PasswordOrCodeIncorrect"
+    ],
+    "404": [
+      "TwoFactorMessages.NotActive"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Auth_EnableTwoFactorAuth": {
+    "400": [
+      "IValidator",
+      "TwoFactorMessages.NoMethodSelected"
+    ],
+    "401": [
+      "AuthMessages.PasswordOrCodeIncorrect"
+    ],
+    "403": [
+      "TwoFactorMessages.NotEligible"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage",
+      "TwoFactorMessages.AlreadyActive"
+    ],
+    "429": [
+      "AuthMessages.AccountEmailLimitReached",
+      "AuthMessages.EmailSentRecently",
+      "IRetryAfterAdvisor"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Auth_ExportMyData": {
+    "403": [
+      "ErasureMessages.NotEligible"
+    ]
+  },
+  "Auth_GetTwoFactorStatus": {
+    "403": [
+      "TwoFactorMessages.NotEligible"
+    ]
+  },
+  "Auth_GoogleSignIn": {
+    "401": [
+      "AuthMessages.GoogleAuthenticationFailed"
+    ],
+    "403": [
+      "AuthMessages.GoogleEmailNotVerified",
+      "AuthMessages.GoogleSignInUnavailable"
+    ],
+    "409": [
+      "AuthMessages.EmailAlreadyExists",
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Auth_GoogleSignOut": {
+    "401": [
+      "AuthMessages.GoogleAuthenticationFailed"
+    ]
+  },
+  "Auth_LiftProcessingRestriction": {
+    "403": [
+      "ErasureMessages.NotEligible"
+    ],
+    "404": [
+      "ErasureMessages.NotRestricted"
+    ],
+    "503": [
+      "ErasureMessages.RestrictionLiftNotificationFailed"
+    ]
+  },
+  "Auth_ListErasureRequests": {
+    "400": [
+      "IValidator"
+    ]
+  },
+  "Auth_Login": {
+    "400": [
+      "AuthMessages.EmailInvalid",
+      "AuthMessages.EmailRequired",
+      "AuthMessages.PasswordRequired",
+      "IValidator"
+    ],
+    "401": [
+      "AuthMessages.InvalidCredentials"
+    ],
+    "503": [
+      "PasswordHashGate"
+    ]
+  },
+  "Auth_PasswordRecovery": {
+    "400": [
+      "AuthMessages.EmailInvalid",
+      "AuthMessages.EmailRequired",
+      "IValidator"
+    ]
+  },
+  "Auth_ReapplyErasures": {
+    "400": [
+      "ErasureMessages.NoSubjectsToReapply"
+    ]
+  },
+  "Auth_RegenerateRecoveryCodes": {
+    "401": [
+      "AuthMessages.PasswordOrCodeIncorrect"
+    ],
+    "404": [
+      "TwoFactorMessages.NotActive"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Auth_Register": {
+    "400": [
+      "AuthMessages.ScopeRequired",
+      "IValidator"
+    ],
+    "403": [
+      "AuthMessages.RegistrationUnavailable"
+    ],
+    "503": [
+      "PasswordHashGate"
+    ]
+  },
+  "Auth_RequestErasure": {
+    "400": [
+      "IValidator"
+    ],
+    "401": [
+      "AuthMessages.PasswordOrCodeIncorrect",
+      "ErasureMessages.CredentialNotAccepted"
+    ],
+    "403": [
+      "ErasureMessages.NotEligible"
+    ],
+    "409": [
+      "ErasureMessages.ErasureAlreadyRequested"
+    ],
+    "503": [
+      "PasswordHashGate"
+    ]
+  },
+  "Auth_ResendTwoFactorChallengeCode": {
+    "503": [
+      "PasswordHashGate"
+    ]
+  },
+  "Auth_ResendVerification": {
+    "400": [
+      "AuthMessages.EmailAlreadyVerified"
+    ],
+    "404": [
+      "AuthMessages.PersonNotFound"
+    ],
+    "429": [
+      "AuthMessages.AccountEmailLimitReached",
+      "AuthMessages.EmailSentRecently",
+      "IRetryAfterAdvisor"
+    ]
+  },
+  "Auth_ResetPassword": {
+    "400": [
+      "AuthMessages.PasswordRequired",
+      "AuthMessages.PasswordTooShort",
+      "AuthMessages.TokenAlreadyUsed",
+      "AuthMessages.TokenExpired",
+      "AuthMessages.TokenInvalid",
+      "AuthMessages.TokenRequired",
+      "IValidator"
+    ],
+    "503": [
+      "PasswordHashGate"
+    ]
+  },
+  "Auth_RestrictProcessing": {
+    "400": [
+      "ErasureMessages.RestrictionGroundUnknown"
+    ],
+    "403": [
+      "ErasureMessages.NotEligible"
+    ],
+    "409": [
+      "ErasureMessages.ProcessingAlreadyRestricted"
+    ]
+  },
+  "Auth_VerifyEmail": {
+    "400": [
+      "AuthMessages.TokenAlreadyUsed",
+      "AuthMessages.TokenExpired",
+      "AuthMessages.TokenInvalid",
+      "AuthMessages.TokenRequired",
+      "IValidator"
+    ],
+    "401": [
+      "AuthMessages.ConfirmationPasswordIncorrect"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "422": [
+      "AuthMessages.ConfirmationPasswordRequired"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Auth_VerifyTwoFactorAuth": {
+    "401": [
+      "TwoFactorMessages.ChallengeTokenInvalid",
+      "TwoFactorMessages.FactorInvalid",
+      "TwoFactorMessages.ScopeNoLongerEligible"
+    ],
+    "503": [
+      "PasswordHashGate"
+    ]
+  },
+  "GoogleUser_Delete": {
+    "403": [
+      "GoogleUserMessages.NotAuthorizedToDeleteGoogleUser"
+    ],
+    "404": [
+      "GoogleUserMessages.GoogleUserNotFound"
+    ]
+  },
+  "GoogleUser_GetById": {
+    "403": [
+      "GoogleUserMessages.NotAuthorizedToViewGoogleUser"
+    ],
+    "404": [
+      "GoogleUserMessages.GoogleUserNotFound"
+    ]
+  },
+  "GoogleUser_HardDelete": {
+    "404": [
+      "GoogleUserMessages.GoogleUserNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "GoogleUser_List": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "GoogleUserMessages.NotScopeOwner"
+    ],
+    "404": [
+      "GoogleUserMessages.ScopeNotFound"
+    ]
+  },
+  "Person_AddScopeOwner": {
+    "400": [
+      "PersonMessages.PersonNotValidScopeAdmin"
+    ],
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.ScopeNotFound"
+    ]
+  },
+  "Person_CreateAdmin": {
+    "400": [
+      "IValidator",
+      "PersonMessages.EmailRequired",
+      "PersonMessages.InvalidRole",
+      "PersonMessages.NameRequired",
+      "PersonMessages.NameTooLong",
+      "PersonMessages.PasswordRequired",
+      "PersonMessages.PasswordTooShort"
+    ],
+    "409": [
+      "PersonMessages.EmailAlreadyExists",
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Person_CreateScopeOwner": {
+    "400": [
+      "IValidator",
+      "PersonMessages.EmailRequired",
+      "PersonMessages.NameRequired",
+      "PersonMessages.NameTooLong",
+      "PersonMessages.PasswordRequired",
+      "PersonMessages.PasswordTooShort"
+    ],
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.ScopeNotFound"
+    ],
+    "409": [
+      "PersonMessages.EmailAlreadyExists",
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Person_CreateUser": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.ScopeNotFound"
+    ],
+    "409": [
+      "PersonMessages.EmailAlreadyExists",
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "PasswordHashGate",
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Person_Delete": {
+    "403": [
+      "PersonMessages.CannotDeleteSelf",
+      "PersonMessages.NotAuthorizedToDeletePerson"
+    ],
+    "404": [
+      "PersonMessages.PersonNotFound"
+    ],
+    "409": [
+      "PersonMessages.ScopeWouldLoseLastOwner",
+      "PersonMessages.WouldRemoveLastSystemAdmin"
+    ]
+  },
+  "Person_GetById": {
+    "403": [
+      "PersonMessages.NotAuthorizedToViewPerson"
+    ],
+    "404": [
+      "PersonMessages.PersonNotFound"
+    ]
+  },
+  "Person_HardDelete": {
+    "403": [
+      "PersonMessages.CannotDeleteSelf"
+    ],
+    "404": [
+      "PersonMessages.PersonNotFound"
+    ],
+    "409": [
+      "PersonMessages.ScopeWouldLoseLastOwner",
+      "PersonMessages.WouldRemoveLastSystemAdmin",
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Person_ListScopeAdmins": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.ScopeNotFound"
+    ]
+  },
+  "Person_ListScopeOwners": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.ScopeNotFound"
+    ]
+  },
+  "Person_ListScopePersons": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.ScopeNotFound"
+    ]
+  },
+  "Person_ListSystemAdmins": {
+    "400": [
+      "IValidator"
+    ]
+  },
+  "Person_PromoteScopeUser": {
+    "400": [
+      "PersonMessages.PersonNotScopeUser"
+    ],
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.ScopeNotFound"
+    ],
+    "409": [
+      "PersonMessages.AlreadyScopeAdmin",
+      "PersonMessages.EmailAlreadyExists",
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ]
+  },
+  "Person_RemoveScopeOwner": {
+    "403": [
+      "PersonMessages.NotScopeOwner"
+    ],
+    "404": [
+      "PersonMessages.PersonNotScopeOwner",
+      "PersonMessages.ScopeNotFound"
+    ],
+    "409": [
+      "PersonMessages.ScopeWouldLoseLastOwner"
+    ]
+  },
+  "Person_SendPasswordReset": {
+    "403": [
+      "PersonMessages.NotAuthorizedToEmailPerson"
+    ],
+    "404": [
+      "PersonMessages.PersonNotFound"
+    ],
+    "409": [
+      "PersonMessages.PersonCannotSignIn",
+      "PersonMessages.PersonIsDeleted",
+      "PersonMessages.PersonProcessingRestricted"
+    ],
+    "429": [
+      "PersonMessages.AccountEmailSentRecently"
+    ]
+  },
+  "Person_SendVerificationEmail": {
+    "400": [
+      "AuthMessages.EmailAlreadyVerified"
+    ],
+    "403": [
+      "PersonMessages.NotAuthorizedToEmailPerson"
+    ],
+    "404": [
+      "PersonMessages.PersonNotFound"
+    ],
+    "409": [
+      "PersonMessages.PersonIsDeleted",
+      "PersonMessages.PersonProcessingRestricted"
+    ],
+    "429": [
+      "PersonMessages.AccountEmailSentRecently"
+    ]
+  },
+  "Person_Update": {
+    "400": [
+      "IValidator",
+      "PersonMessages.NameRequired",
+      "PersonMessages.NameTooLong",
+      "PersonMessages.UnknownRole",
+      "PersonMessages.UnsupportedRoleTransition"
+    ],
+    "401": [
+      "AuthMessages.PasswordOrCodeIncorrect"
+    ],
+    "403": [
+      "PersonMessages.NotAuthorizedToUpdatePerson",
+      "PersonMessages.RoleChangeRequiresSystemAdmin"
+    ],
+    "404": [
+      "PersonMessages.PersonNotFound"
+    ],
+    "409": [
+      "PersonMessages.EmailAlreadyExists",
+      "PersonMessages.EmailSignInMethodEnabled",
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "429": [
+      "AuthMessages.AccountEmailLimitReached",
+      "AuthMessages.EmailSentRecently",
+      "IRetryAfterAdvisor"
+    ],
+    "503": [
+      "PasswordHashGate"
+    ]
+  },
+  "ScopeInvitation_Accept": {
+    "404": [
+      "ScopeInvitationMessages.InvitationNotOpen"
+    ]
+  },
+  "ScopeInvitation_Decline": {
+    "404": [
+      "ScopeInvitationMessages.InvitationNotOpen"
+    ]
+  },
+  "ScopeInvitation_ListForScope": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "ScopeMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "ScopeInvitation_ListMine": {
+    "400": [
+      "IValidator"
+    ]
+  },
+  "ScopeInvitation_Withdraw": {
+    "403": [
+      "ScopeMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopeInvitationMessages.InvitationNotOpen",
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "ScopePermission_Create": {
+    "400": [
+      "IValidator",
+      "ScopePermissionMessages.DescriptionTooLong",
+      "ScopePermissionMessages.NameRequired",
+      "ScopePermissionMessages.NameTooLong"
+    ],
+    "403": [
+      "ScopePermissionMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopePermissionMessages.ScopeNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "ScopePermission_Delete": {
+    "403": [
+      "ScopePermissionMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopePermissionMessages.ScopePermissionNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "ScopePermission_GetById": {
+    "403": [
+      "ScopePermissionMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopePermissionMessages.ScopePermissionNotFound"
+    ]
+  },
+  "ScopePermission_HardDelete": {
+    "404": [
+      "ScopePermissionMessages.ScopePermissionNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "ScopePermission_List": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "ScopePermissionMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopePermissionMessages.ScopeNotFound"
+    ]
+  },
+  "ScopePermission_Update": {
+    "400": [
+      "IValidator",
+      "ScopePermissionMessages.DescriptionTooLong",
+      "ScopePermissionMessages.NameRequired",
+      "ScopePermissionMessages.NameTooLong"
+    ],
+    "403": [
+      "ScopePermissionMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopePermissionMessages.ScopePermissionNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Scope_Create": {
+    "400": [
+      "IValidator",
+      "ScopeMessages.AtLeastOneOwnerRequired",
+      "ScopeMessages.NameRequired",
+      "ScopeMessages.OwnerNotValidScopeAdmin"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage",
+      "ScopeMessages.NameAlreadyExists"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Scope_Delete": {
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "Scope_DiscardPendingRegistration": {
+    "403": [
+      "ScopeMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopeMessages.PendingRegistrationNotFound",
+      "ScopeMessages.ScopeNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Scope_GetById": {
+    "403": [
+      "ScopeMessages.NotAuthorizedToViewScope"
+    ],
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "Scope_HardDelete": {
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ],
+    "409": [
+      "RelationalErrors.ConcurrencyMessage",
+      "RelationalErrors.IntegrityViolationMessage",
+      "RelationalErrors.UniqueViolationMessage"
+    ],
+    "503": [
+      "RelationalErrors.TransientMessage"
+    ]
+  },
+  "Scope_List": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "ScopeMessages.NotAuthorizedToListScopes"
+    ]
+  },
+  "Scope_ListPendingRegistrations": {
+    "400": [
+      "IValidator"
+    ],
+    "403": [
+      "ScopeMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "Scope_SetEmailLinks": {
+    "400": [
+      "IValidator",
+      "ScopeMessages.EmailLinkInvalid"
+    ],
+    "403": [
+      "ScopeMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "Scope_SetGoogleSignIn": {
+    "400": [
+      "IValidator",
+      "ScopeMessages.EnabledRequired"
+    ],
+    "403": [
+      "ScopeMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "Scope_SetSelfRegistration": {
+    "400": [
+      "IValidator",
+      "ScopeMessages.EnabledRequired"
+    ],
+    "403": [
+      "ScopeMessages.NotScopeOwner"
+    ],
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ]
+  },
+  "Scope_Update": {
+    "400": [
+      "IValidator",
+      "ScopeMessages.ConsentBasisNotSupported",
+      "ScopeMessages.LegalBasisUnknown",
+      "ScopeMessages.NameRequired",
+      "ScopeMessages.PrivacyNoticeUriInvalid"
+    ],
+    "404": [
+      "ScopeMessages.ScopeNotFound"
+    ],
+    "409": [
+      "ScopeMessages.NameAlreadyExists"
+    ]
+  }
+}

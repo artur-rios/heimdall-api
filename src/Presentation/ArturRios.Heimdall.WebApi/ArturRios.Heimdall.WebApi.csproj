@@ -52,4 +52,14 @@
     <Content Include="Environments\.env*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The error statuses each handler can answer, derived from the source by
+         scripts/error_responses.py; ErrorResponseFilter documents the operations from it. Embedded
+         rather than copied, so the running API and tools/ArturRios.Heimdall.OpenApiGen read the very
+         same file, and taken out of the Web SDK's **/*.json content glob, which would also publish it. -->
+    <Content Remove="Documentation\error-responses.json" />
+    <EmbeddedResource Include="Documentation\error-responses.json"
+                      LogicalName="ArturRios.Heimdall.WebApi.Documentation.error-responses.json" />
+  </ItemGroup>
+
 </Project>
