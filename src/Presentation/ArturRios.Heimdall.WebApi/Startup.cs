@@ -73,6 +73,9 @@ public class Startup : WebApiStartup
     ///         left off for that reason: <see cref="SwaggerConfiguration" /> defines the "Bearer" scheme
     ///         and the document-wide requirement itself, and the library's would collide with it — its
     ///         <c>AddSecurityDefinition</c> throws on a duplicate key, and it runs after this callback.
+    ///         The version the document is served in, <see cref="SwaggerConfiguration.SpecVersion" />,
+    ///         is the middleware's option rather than the generator's, so
+    ///         <see cref="ConfigureServices" /> registers it.
     ///     </para>
     ///     <para>
     ///         This does not expose the document in production: Util.WebApi registers Swagger only in
@@ -132,6 +135,11 @@ public class Startup : WebApiStartup
         Log.Information("Configuration loaded successfully");
 
         Builder.Services.AddHeimdallControllers();
+
+        // The version the document at /swagger/v1/swagger.json is written in, which the standard
+        // sequence's generator configuration has no say over: it is the middleware's option. Harmless
+        // where Util.WebApi registers no Swagger, since nothing then reads it.
+        Builder.Services.ConfigureSwagger(SwaggerConfiguration.ConfigureEndpoint);
 
         Log.Information("Web api configured successfully");
 

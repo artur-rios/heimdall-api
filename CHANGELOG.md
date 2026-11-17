@@ -40,6 +40,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A collection built some other way where a collection expression would do now fails the build (IDE0028 and
   IDE0300 to IDE0306): `[]` and `[.. source]` in place of `new List<T>()`, `new[] { ... }`, `Enumerable.Empty<T>()`,
   `.ToList()` chains and the like. The generated EF Core migrations are marked `generated_code` and left as written.
+- The OpenAPI document is now OpenAPI 3.1 (`"openapi": "3.1.2"`, it was 3.0.4), both `docs/openapi/heimdall.json`
+  and the one the API serves at `/swagger/v1/swagger.json` where Swagger is on. Nullable fields use 3.1's null
+  type instead of the `nullable` keyword, which 3.1 dropped: `type: ["null", "string"]` and the like for the 379
+  nullable scalars and arrays, and `anyOf: [{ $ref }, { type: "null" }]` for the 60 nullable references, so a
+  client generator that reads 3.1 (swagger_parser 2) accepts a `"data": null`. Everything else in the document
+  is unchanged, and nothing changes on the wire.
 
 ### Fixed
 
@@ -56,8 +62,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Request bodies: the 30 operations that refuse a request without a body (400) now mark it `required`.
     `POST .../applications/{id}/credentials` keeps an optional body, as the API accepts an empty one.
   - Nullable fields: the `data` of all 59 `*DataOutput` envelopes (null whenever a response carries no payload)
-    and `DataExportCommandOutput.erasure` are now marked `nullable`. OpenAPI 3.0 cannot mark a `$ref` nullable, so
-    these are written as `allOf: [{ $ref }]` with `nullable: true`.
+    and `DataExportCommandOutput.erasure` are now marked nullable. A `$ref` cannot be marked nullable by itself, so
+    these are written as `anyOf: [{ $ref }, { type: "null" }]` (OpenAPI 3.1, under Changed).
 
 ## [6.0.0] - 2026-11-10
 

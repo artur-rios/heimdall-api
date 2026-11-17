@@ -65,7 +65,7 @@ public static class Program
 
         await using (var stream = File.Create(fullPath))
         {
-            await document.SerializeAsJsonAsync(stream, OpenApiSpecVersion.OpenApi3_0);
+            await document.SerializeAsJsonAsync(stream, SwaggerConfiguration.SpecVersion);
         }
 
         var operations = document.Paths.Sum(path => path.Value.Operations?.Count ?? 0);
