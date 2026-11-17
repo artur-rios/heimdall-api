@@ -28,6 +28,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
     /// </summary>
     [HttpPost]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    [ProducesResponseType<DataOutput<CreateScopePermissionCommandOutput>>(StatusCodes.Status201Created)]
     public async Task<ActionResult<DataOutput<CreateScopePermissionCommandOutput?>>> Create(
         Guid scopeId, [FromBody] CreateScopePermissionCommand command)
     {

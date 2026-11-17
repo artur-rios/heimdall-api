@@ -48,6 +48,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   lowercased to a dotless `ı` and the address stopped matching). The email-verification and password-reset
   lifetimes are parsed with the invariant culture too, so `1.5` is never read as `15`. The container runs with the
   invariant culture, so deployed instances were not affected.
+- The OpenAPI document (`docs/openapi/heimdall.json`) now matches what the API answers, so a client generated from
+  it accepts every answer the server gives. Nothing changes on the wire: statuses, bodies and JSON stay as they were.
+  - Success statuses: the creates answer `201 Created` and `POST /api/auth/register` answers `202 Accepted`, but the
+    document declared `200` for all of them. It now declares the status each operation's handler answers, read from
+    the same message-to-status maps the server uses (8 operations).
+  - Request bodies: the 30 operations that refuse a request without a body (400) now mark it `required`.
+    `POST .../applications/{id}/credentials` keeps an optional body, as the API accepts an empty one.
+  - Nullable fields: the `data` of all 59 `*DataOutput` envelopes (null whenever a response carries no payload)
+    and `DataExportCommandOutput.erasure` are now marked `nullable`. OpenAPI 3.0 cannot mark a `$ref` nullable, so
+    these are written as `allOf: [{ $ref }]` with `nullable: true`.
 
 ## [6.0.0] - 2026-11-10
 

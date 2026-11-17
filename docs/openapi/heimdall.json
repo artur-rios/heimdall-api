@@ -50,11 +50,12 @@
                 "$ref": "#/components/schemas/CreateApplicationCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -291,7 +292,8 @@
                 "$ref": "#/components/schemas/UpdateApplicationCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -500,8 +502,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -692,7 +694,8 @@
                 "$ref": "#/components/schemas/IssueApplicationTokenCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -884,7 +887,8 @@
                 "$ref": "#/components/schemas/LoginCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -936,7 +940,8 @@
                 "$ref": "#/components/schemas/PasswordRecoveryCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -988,11 +993,12 @@
                 "$ref": "#/components/schemas/RegisterCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "202": {
+            "description": "Accepted",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1040,7 +1046,8 @@
                 "$ref": "#/components/schemas/ResetPasswordCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1092,7 +1099,8 @@
                 "$ref": "#/components/schemas/VerifyEmailCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1184,7 +1192,8 @@
                 "$ref": "#/components/schemas/GoogleSignInCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1276,7 +1285,8 @@
                 "$ref": "#/components/schemas/EnableTwoFactorAuthCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1335,7 +1345,8 @@
                 "$ref": "#/components/schemas/ConfirmTwoFactorAuthCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1394,7 +1405,8 @@
                 "$ref": "#/components/schemas/VerifyTwoFactorAuthCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1446,7 +1458,8 @@
                 "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1498,7 +1511,8 @@
                 "$ref": "#/components/schemas/DisableTwoFactorAuthCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1557,7 +1571,8 @@
                 "$ref": "#/components/schemas/RegenerateRecoveryCodesCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1656,7 +1671,8 @@
                 "$ref": "#/components/schemas/RequestErasureCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1715,7 +1731,8 @@
                 "$ref": "#/components/schemas/RestrictProcessingCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1774,7 +1791,8 @@
                 "$ref": "#/components/schemas/ReapplyErasuresCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1836,7 +1854,8 @@
                 "$ref": "#/components/schemas/LiftProcessingRestrictionCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -2352,11 +2371,12 @@
                 "$ref": "#/components/schemas/CreateAdminCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2425,11 +2445,12 @@
                 "$ref": "#/components/schemas/CreateUserCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2587,11 +2608,12 @@
                 "$ref": "#/components/schemas/CreateScopeOwnerCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2996,7 +3018,8 @@
                 "$ref": "#/components/schemas/UpdatePersonCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3504,11 +3527,12 @@
                 "$ref": "#/components/schemas/CreateScopeCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3650,7 +3674,8 @@
                 "$ref": "#/components/schemas/UpdateScopeCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3886,7 +3911,8 @@
                 "$ref": "#/components/schemas/SetGoogleSignInCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3959,7 +3985,8 @@
                 "$ref": "#/components/schemas/SetSelfRegistrationCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -4032,7 +4059,8 @@
                 "$ref": "#/components/schemas/SetScopeEmailLinksCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -4523,11 +4551,12 @@
                 "$ref": "#/components/schemas/CreateScopePermissionCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4756,7 +4785,8 @@
                 "$ref": "#/components/schemas/UpdateScopePermissionCommand"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -4983,7 +5013,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5044,7 +5079,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/AddScopeOwnerCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AddScopeOwnerCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5088,7 +5128,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ApplicationCredentialListOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApplicationCredentialListOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5184,7 +5229,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ApplicationOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApplicationOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5301,7 +5351,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ApplicationTokenCheckOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ApplicationTokenCheckOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5462,7 +5517,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ConfirmTwoFactorAuthCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmTwoFactorAuthCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5555,7 +5615,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/CreateApplicationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateApplicationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5620,7 +5685,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/CreatePersonCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreatePersonCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5717,7 +5787,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/CreateScopeCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateScopeCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5812,7 +5887,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/CreateScopePermissionCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateScopePermissionCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5912,7 +5992,12 @@
             "$ref": "#/components/schemas/DataExportProcessing"
           },
           "erasure": {
-            "$ref": "#/components/schemas/DataExportErasure"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataExportErasure"
+              }
+            ],
+            "nullable": true
           },
           "scopeMemberships": {
             "type": "array",
@@ -6004,7 +6089,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DataExportCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataExportCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6291,7 +6381,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6335,7 +6430,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DeleteApplicationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeleteApplicationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6379,7 +6479,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DeleteGoogleUserCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeleteGoogleUserCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6423,7 +6528,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DeletePersonCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeletePersonCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6476,7 +6586,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DeleteScopeCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeleteScopeCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6520,7 +6635,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DeleteScopePermissionCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeleteScopePermissionCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6578,7 +6698,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DisableTwoFactorAuthCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DisableTwoFactorAuthCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6619,7 +6744,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6681,7 +6811,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6838,7 +6973,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/GoogleSignInCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GoogleSignInCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6873,7 +7013,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/GoogleSignOutCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GoogleSignOutCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6948,7 +7093,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/GoogleUserOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GoogleUserOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7049,7 +7199,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/HardDeleteApplicationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HardDeleteApplicationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7090,7 +7245,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/HardDeleteGoogleUserCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HardDeleteGoogleUserCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7139,7 +7299,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/HardDeletePersonCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HardDeletePersonCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7196,7 +7361,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/HardDeleteScopeCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HardDeleteScopeCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7237,7 +7407,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/HardDeleteScopePermissionCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HardDeleteScopePermissionCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7302,7 +7477,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7369,7 +7549,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/IssueApplicationTokenCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueApplicationTokenCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7485,7 +7670,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7571,7 +7761,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/LoginCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LoginCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7711,7 +7906,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/PasswordRecoveryCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PasswordRecoveryCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7887,7 +8087,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/PersonOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PersonOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8097,7 +8302,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/PromoteScopeUserCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PromoteScopeUserCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8168,7 +8378,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ReapplyErasuresCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReapplyErasuresCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8226,7 +8441,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/RegenerateRecoveryCodesCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RegenerateRecoveryCodesCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8284,7 +8504,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/RegisterCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RegisterCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8329,7 +8554,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/RemoveScopeOwnerCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RemoveScopeOwnerCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8402,7 +8632,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/RequestErasureCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RequestErasureCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8447,7 +8682,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8482,7 +8722,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ResendVerificationEmailCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResendVerificationEmailCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8531,7 +8776,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ResetPasswordCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResetPasswordCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8590,7 +8840,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/RestrictProcessingCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RestrictProcessingCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8635,7 +8890,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8726,7 +8986,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ScopeOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScopeOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8947,7 +9212,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/ScopePermissionOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ScopePermissionOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9048,7 +9318,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9089,7 +9364,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9175,7 +9455,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/SetGoogleSignInCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SetGoogleSignInCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9268,7 +9553,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9357,7 +9647,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/SetSelfRegistrationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SetSelfRegistrationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9439,7 +9734,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/TwoFactorStatusOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TwoFactorStatusOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9514,7 +9814,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/UpdateApplicationCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdateApplicationCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9618,7 +9923,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/UpdatePersonCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdatePersonCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9720,7 +10030,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/UpdateScopeCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdateScopeCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9801,7 +10116,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/UpdateScopePermissionCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdateScopePermissionCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9850,7 +10170,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/VerifyEmailCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VerifyEmailCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9919,7 +10244,12 @@
             "readOnly": true
           },
           "data": {
-            "$ref": "#/components/schemas/VerifyTwoFactorAuthCommandOutput"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VerifyTwoFactorAuthCommandOutput"
+              }
+            ],
+            "nullable": true
           }
         },
         "additionalProperties": false

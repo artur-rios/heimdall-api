@@ -33,6 +33,7 @@ public class ApplicationCredentialController(CommandMediator commandMediator, Qu
     /// </summary>
     [HttpPost]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    [ProducesResponseType<DataOutput<IssueApplicationCredentialCommandOutput>>(StatusCodes.Status201Created)]
     public async Task<ActionResult<DataOutput<IssueApplicationCredentialCommandOutput?>>> Issue(
         Guid scopeId, Guid id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] IssueApplicationCredentialCommand? command)

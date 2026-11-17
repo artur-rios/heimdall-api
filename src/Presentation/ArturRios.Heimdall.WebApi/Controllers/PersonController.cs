@@ -30,6 +30,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     [HttpPost("persons")]
     [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin)]
+    [ProducesResponseType<DataOutput<CreatePersonCommandOutput>>(StatusCodes.Status201Created)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateAdmin(
         [FromBody] CreateAdminCommand command)
     {
@@ -51,6 +52,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     [HttpPost("scopes/{scopeId:guid}/persons")]
     [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    [ProducesResponseType<DataOutput<CreatePersonCommandOutput>>(StatusCodes.Status201Created)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateUser(
         Guid scopeId, [FromBody] CreateUserCommand command)
     {
@@ -76,6 +78,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     [HttpPost("scopes/{scopeId:guid}/owners")]
     [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    [ProducesResponseType<DataOutput<CreatePersonCommandOutput>>(StatusCodes.Status201Created)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateScopeOwner(
         Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
     {

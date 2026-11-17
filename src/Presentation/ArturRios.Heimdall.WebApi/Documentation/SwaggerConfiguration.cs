@@ -1,7 +1,11 @@
 using System.Reflection;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Util.WebApi.Security.Attributes;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -81,6 +85,9 @@ public static class SwaggerConfiguration
         }
 
         options.IncludeXmlComments(xmlPath);
+
+        options.RequestBodyFilter<RequiredRequestBodyFilter>();
+        options.SchemaFilter<NullableReferencePropertySchemaFilter>();
 
         options.DocumentFilter<SecurityDocumentFilter>();
 
@@ -228,6 +235,105 @@ public sealed class SecurityDocumentFilter : IDocumentFilter
 
     private static string Append(string? description, string line) =>
         string.IsNullOrWhiteSpace(description) ? line : $"{description}\n\n{line}";
+}
+
+/// <summary>
+///     Marks a <c>[FromBody]</c> request body as required when the action rejects a request without
+///     one.
+///
+///     MVC refuses an empty body unless the action allows it: <c>[FromBody(EmptyBodyBehavior =
+///     EmptyBodyBehavior.Allow)]</c>, a nullable parameter, a parameter with a default value, or
+///     <c>MvcOptions.AllowEmptyInputInBodyModelBinding</c>. The refusal is a model-state error, which
+///     <c>MalformedRequestFilter</c> answers with 400 before the handler runs. Swashbuckle documents
+///     every body as optional all the same, because the API turns off MVC's implicit
+///     <c>[Required]</c> (<c>ModelBindingConfiguration</c>) and that is what it reads; so this filter
+///     states the binder's own rule instead. A generated client builds a method without a body, or
+///     with an optional one, from an optional body, which is a call the server can only refuse.
+/// </summary>
+public sealed class RequiredRequestBodyFilter(IOptions<MvcOptions> mvcOptions) : IRequestBodyFilter
+{
+    public void Apply(IOpenApiRequestBody requestBody, RequestBodyFilterContext context)
+    {
+        if (requestBody is not OpenApiRequestBody concrete
+            || context.BodyParameterDescription?.ParameterDescriptor is not { } parameter)
+        {
+            return;
+        }
+
+        concrete.Required = !AllowsEmptyBody(parameter);
+    }
+
+    private bool AllowsEmptyBody(ParameterDescriptor parameter)
+    {
+        var behavior = parameter.BindingInfo?.EmptyBodyBehavior ?? EmptyBodyBehavior.Default;
+
+        if (behavior != EmptyBodyBehavior.Default)
+        {
+            return behavior == EmptyBodyBehavior.Allow;
+        }
+
+        // What MVC infers for an unattributed parameter: a nullable one, or one with a default
+        // value, takes an empty body as "no value".
+        if (parameter is ControllerParameterDescriptor { ParameterInfo: var info }
+            && (info.HasDefaultValue
+                || new NullabilityInfoContext().Create(info).WriteState == NullabilityState.Nullable))
+        {
+            return true;
+        }
+
+        return mvcOptions.Value.AllowEmptyInputInBodyModelBinding;
+    }
+}
+
+/// <summary>
+///     Marks a property whose schema is a reference to another schema as nullable when the C# member
+///     is declared nullable.
+///
+///     The API writes nulls, so <c>"data": null</c> is on the wire whenever an envelope carries no
+///     payload (<c>DataOutput&lt;T&gt;.Data</c> is <c>T?</c>), and so is an optional section such as
+///     <c>DataExportCommandOutput.Erasure</c>. Swashbuckle already marks every other reference-typed
+///     property nullable, but OpenAPI 3.0 ignores anything written beside a <c>$ref</c>, so a
+///     property that refers to another schema is left looking as if it can never be null, and a
+///     client generated from the document fails on the first null it reads. The fix 3.0 allows is to
+///     wrap the reference: <c>allOf: [{ $ref }]</c> with <c>nullable: true</c>.
+///
+///     Only a member the nullable annotations declare nullable is wrapped: a <c>required</c> or
+///     otherwise non-nullable one keeps its plain reference, because that is a promise the code
+///     makes.
+/// </summary>
+public sealed class NullableReferencePropertySchemaFilter(ISerializerDataContractResolver resolver) : ISchemaFilter
+{
+    public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
+    {
+        // Only a type's own schema: a member's schema is a reference already, or inline.
+        if (context.MemberInfo is not null
+            || context.ParameterInfo is not null
+            || schema.Properties is not { Count: > 0 } properties
+            || resolver.GetDataContractForType(context.Type).ObjectProperties is not { } members)
+        {
+            return;
+        }
+
+        var nullability = new NullabilityInfoContext();
+
+        foreach (var member in members)
+        {
+            if (properties.TryGetValue(member.Name, out var property)
+                && property is OpenApiSchemaReference reference
+                && IsNullable(nullability, member.MemberInfo))
+            {
+                properties[member.Name] = new OpenApiSchema { AllOf = [reference], Type = JsonSchemaType.Null };
+            }
+        }
+    }
+
+    private static bool IsNullable(NullabilityInfoContext nullability, MemberInfo? member) =>
+        member switch
+        {
+            PropertyInfo property => nullability.Create(property).ReadState != NullabilityState.NotNull,
+            FieldInfo field => nullability.Create(field).ReadState != NullabilityState.NotNull,
+            _ => false
+        };
 }
 
 /// <summary>
