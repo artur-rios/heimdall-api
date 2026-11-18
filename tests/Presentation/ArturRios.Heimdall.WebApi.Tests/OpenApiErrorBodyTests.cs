@@ -84,6 +84,29 @@ public class OpenApiErrorBodyTests(PostgresFixture db) : WebApiTest<Program>(Env
         await AssertDocumentedAsync(response, "/api/scopes", "post", "400");
     }
 
+    [FunctionalFact]
+    public async Task GivenABodyNoFormatterReads_WhenAScopeIsCreated_ThenThe415HasNoBodyAsDocumented()
+    {
+        // Given a body sent as text/plain, which no input formatter reads
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+        using var body = new StringContent("{}", Encoding.UTF8, "text/plain");
+
+        // When
+        using var response = await Gateway.Client.PostAsync("/api/scopes", body);
+
+        // Then: MVC's UnsupportedContentTypeFilter, ahead of MalformedRequestFilter, with no body
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
+
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
+            Environment.GetEnvironmentVariable("HEIMDALL_OPENAPI_DOCUMENT")
+            ?? Path.Combine(Repository.Root, "docs", "openapi", "heimdall.json")));
+        var documented = document.RootElement.GetProperty("paths").GetProperty("/api/scopes").GetProperty("post")
+            .GetProperty("responses").GetProperty("415");
+
+        Assert.False(documented.TryGetProperty("content", out _));
+    }
+
     private static async Task AssertDocumentedAsync(HttpResponseMessage response, string route, string method, string status)
     {
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(

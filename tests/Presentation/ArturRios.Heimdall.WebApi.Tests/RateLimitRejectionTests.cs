@@ -80,7 +80,8 @@ public class RateLimitRejectionTests() : WebApiTest<Program>(EnvironmentType.Loc
         using var openApi = LoadDocument();
         var documented = openApi.RootElement.GetProperty("paths").GetProperty(Route).GetProperty("post")
             .GetProperty("responses").GetProperty("429").GetProperty("content");
-        var mediaType = Assert.Single(documented.EnumerateObject());
+        // The API's own rejection; Traefik's text/plain beside it is the proxy's, which this host has not.
+        var mediaType = documented.EnumerateObject().Single(media => media.Name == "application/json");
         var schemaName = mediaType.Value.GetProperty("schema").GetProperty("$ref").GetString()!.Split('/')[^1];
         var properties = openApi.RootElement.GetProperty("components").GetProperty("schemas").GetProperty(schemaName)
             .GetProperty("properties").EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal);
