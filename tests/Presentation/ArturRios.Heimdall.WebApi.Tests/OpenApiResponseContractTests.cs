@@ -364,9 +364,14 @@ public partial class OpenApiResponseContractTests
         using var document = LoadDocument();
         var operations = Operations(document).ToDictionary(operation => operation.OperationId);
 
-        // 500 is ExceptionMiddleware's, which every operation can meet.
-        Assert.Equal(["200", "500"], Statuses(operations["HealthCheck_HelloWorld"].Operation));
-        Assert.Equal(["200", "500", "503"], Statuses(operations["HealthCheck_Ready"].Operation));
+        // 500 is ExceptionMiddleware's, and 400, 408, 414, 431 and 505 Kestrel's own refusals of a
+        // request line or headers, which every operation can meet.
+        Assert.Equal(
+            ["200", "400", "408", "414", "431", "500", "505"],
+            Statuses(operations["HealthCheck_HelloWorld"].Operation));
+        Assert.Equal(
+            ["200", "400", "408", "414", "431", "500", "503", "505"],
+            Statuses(operations["HealthCheck_Ready"].Operation));
 
         var unavailable = operations["HealthCheck_Ready"].Operation.GetProperty("responses").GetProperty("503");
 
