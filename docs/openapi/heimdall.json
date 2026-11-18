@@ -2,7 +2,7 @@
   "openapi": "3.1.2",
   "info": {
     "title": "Heimdall API",
-    "description": "A centralized identity management API with scope-based multi-tenancy.\n\nEvery identifier in a path is a **PublicId** (GUID), never an internal id. Every endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, `PaginatedOutput<T>` for a listing.\n\nObtain a token from `POST /api/auth/login`, then authorize with it. A challenge token issued by a 2FA-gated login is not one: no endpoint accepts it as a bearer credential, and it is read only from the `challengeToken` body field of `POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.",
+    "description": "A centralized identity management API with scope-based multi-tenancy.\n\nEvery identifier in a path is a **PublicId** (GUID), never an internal id. A successful answer is one of two envelopes — `DataOutput<T>` for a single resource, `PaginatedOutput<T>` for a listing — except the key set itself from `GET /.well-known/jwks.json` and the bodiless `204` of withdrawing an invitation.\n\nObtain a token from `POST /api/auth/login`, then authorize with it. A challenge token issued by a 2FA-gated login is not one: no endpoint accepts it as a bearer credential, and it is read only from the `challengeToken` body field of `POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.\n\n**Errors.** Each operation lists every status that the API, its web server (Kestrel) and the proxy in front of it in production (Traefik) can answer for it, with the body each writes: the API's envelopes as JSON, `ProcessOutput` from its filters, no body from Kestrel's own refusals, and Traefik's status text as `text/plain`. The statuses a handler fails with are read from the source: every message the handler and the code it reaches name, looked up in the status map its action passes. That is an upper bound, since a message the code names is taken to be one it can fail with; measured, it adds message names inside a status, never a status.\n\n**Not listed per operation.** These answers belong to no single operation, or are no HTTP status at all:\n\n- For any path: the API's `404` for a path no operation has and `405` for a method it lacks, without a body; Traefik's refusals of a request it cannot parse, before it routes it (`400`, `431` over 1 MB of headers, `501` for a transfer coding it does not support), its `404 page not found` while no healthy instance is routed, such as during a deploy, all as `text/plain`, and its redirect of a plain-HTTP request to HTTPS (`301` or `308`).\n- When Cloudflare proxies the host: its own error pages (the `52x` statuses, and its `1xxx` errors under others), as HTML.\n- No status at all: a connection closed or reset (a refused request body still being sent, a response that failed after it started, Traefik's 60-second read timeout, Kestrel's keep-alive timeout) and an HTTP/2 stream reset.\n- In Development and Local only, where it is on: the developer exception page, a `500` as `text/html`. It is never on for a public host.",
     "contact": {
       "name": "Artur Rios",
       "url": "https://github.com/artur-rios/heimdall-api"
@@ -167,15 +167,33 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -191,6 +209,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateApplicationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -347,11 +375,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -489,11 +542,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -669,15 +747,33 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -693,6 +789,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdateApplicationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -823,11 +929,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -843,6 +964,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteApplicationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -975,11 +1106,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -995,6 +1141,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteApplicationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1171,15 +1327,43 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1295,11 +1479,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1441,11 +1650,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1558,6 +1792,9 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -1580,11 +1817,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1648,11 +1910,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1807,11 +2094,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1924,13 +2236,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -1939,6 +2260,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1946,11 +2272,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1974,6 +2315,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProcessOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2067,13 +2418,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -2082,6 +2442,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -2089,11 +2454,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2202,13 +2592,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -2217,6 +2616,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -2224,11 +2628,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2252,6 +2671,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProcessOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2345,13 +2774,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -2360,6 +2798,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -2367,11 +2810,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2395,6 +2853,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProcessOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2518,6 +2986,9 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "422": {
             "description": "Unprocessable Entity. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -2534,12 +3005,18 @@
             }
           },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -2548,6 +3025,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -2555,11 +3037,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2583,6 +3080,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyEmailCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2685,12 +3192,18 @@
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
-            "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -2704,6 +3217,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ResendVerificationEmailCommandOutputDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -2711,11 +3229,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2858,13 +3401,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -2873,6 +3425,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -2880,11 +3437,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2900,6 +3472,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GoogleSignInCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2974,15 +3556,64 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "429": {
+            "description": "Too Many Requests. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3125,13 +3756,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -3145,6 +3785,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutputDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -3152,11 +3797,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3180,6 +3840,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3337,13 +4007,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -3352,6 +4031,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -3359,11 +4043,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3387,6 +4086,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConfirmTwoFactorAuthCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3499,13 +4208,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -3514,6 +4232,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -3521,11 +4244,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3549,6 +4287,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProcessOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3642,13 +4390,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -3657,6 +4414,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -3664,11 +4426,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3692,6 +4469,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProcessOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3845,13 +4632,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -3860,6 +4656,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -3867,11 +4668,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3895,6 +4711,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DisableTwoFactorAuthCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4052,13 +4878,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -4067,6 +4902,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -4074,11 +4914,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4102,6 +4957,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegenerateRecoveryCodesCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4180,15 +5045,64 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "429": {
+            "description": "Too Many Requests. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4331,13 +5245,22 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
-            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
+            "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before trying again.",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -4346,6 +5269,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ObjectDataOutput"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -4353,11 +5281,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4381,6 +5324,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProcessOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4523,15 +5476,67 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
+          "429": {
+            "description": "Too Many Requests. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4659,15 +5664,67 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
+          "429": {
+            "description": "Too Many Requests. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4810,15 +5867,57 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
+          "429": {
+            "description": "Too Many Requests. Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Retry-In": {
+                "description": "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4834,6 +5933,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -4953,11 +6062,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5040,11 +6174,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5202,11 +6361,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5344,11 +6528,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5464,11 +6673,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5601,11 +6835,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5621,6 +6870,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteGoogleUserCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5673,11 +6932,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5726,11 +7010,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5746,6 +7045,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5884,6 +7193,9 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -5906,11 +7218,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5934,6 +7261,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -6102,6 +7439,9 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -6124,11 +7464,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -6152,6 +7507,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -6307,11 +7672,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -6480,6 +7870,9 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -6502,11 +7895,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -6530,6 +7938,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -6685,11 +8103,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -6867,11 +8310,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7002,11 +8470,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7151,11 +8644,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7324,6 +8842,9 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "429": {
             "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -7351,11 +8872,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7379,6 +8915,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProcessOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7500,11 +9046,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7631,11 +9202,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7759,11 +9355,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7779,6 +9390,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeletePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -7928,11 +9549,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8059,11 +9705,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8214,11 +9885,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8357,11 +10053,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8504,15 +10225,33 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8528,6 +10267,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateScopeCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8652,11 +10401,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8825,15 +10599,43 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8940,11 +10742,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9071,11 +10898,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9199,11 +11051,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9219,6 +11086,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteScopeCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9372,15 +11249,43 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9534,15 +11439,43 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9696,15 +11629,43 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9841,11 +11802,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9978,11 +11964,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9998,6 +11999,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10134,11 +12145,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10244,11 +12280,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10361,11 +12422,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10474,11 +12560,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10587,11 +12698,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10760,15 +12896,33 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10784,6 +12938,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateScopePermissionCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -10932,11 +13096,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11074,11 +13263,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11254,15 +13468,33 @@
           "414": {
             "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
+          "415": {
+            "description": "Unsupported Media Type. The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body."
+          },
           "431": {
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11278,6 +13510,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdateScopePermissionCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11408,11 +13650,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11428,6 +13685,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteScopePermissionCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11560,11 +13827,26 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11580,6 +13862,16 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteScopePermissionCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -11645,11 +13937,36 @@
             "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
-            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
+            "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string. If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body. Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway. Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout. Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }

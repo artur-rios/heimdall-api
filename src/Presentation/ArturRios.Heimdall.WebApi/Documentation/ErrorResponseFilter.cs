@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Mime;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.Security.Attributes;
@@ -54,7 +55,29 @@ public enum ErrorSource
     ///     Kestrel refusing the request before the API sees it, while it parses the request line and
     ///     headers: its own response, with <c>Content-Length: 0</c> and no body.
     /// </summary>
-    Server
+    Server,
+
+    /// <summary>
+    ///     MVC's own <c>UnsupportedContentTypeFilter</c>, which AddControllers puts ahead of every other
+    ///     action filter: a body whose <c>Content-Type</c> no input formatter reads, or that has none,
+    ///     is answered <c>415</c> with no body, before MalformedRequestFilter sees the binding error.
+    /// </summary>
+    UnsupportedContentType,
+
+    /// <summary>
+    ///     A failure that escapes <c>ExceptionMiddleware</c> before an answer has started: in the
+    ///     middleware ahead of it, or while it writes its own envelope. Kestrel answers 500 with
+    ///     <c>Content-Length: 0</c> and no body.
+    /// </summary>
+    Escaped,
+
+    /// <summary>
+    ///     Traefik, the proxy in front of the API in production (yggdrasil's
+    ///     <c>stacks/heimdall-api.proxy.yml</c>): its <c>ratelimit</c> middleware on the credential
+    ///     routes, and its own answer when it cannot relay a request. Its body is the status text as
+    ///     <c>text/plain; charset=utf-8</c>.
+    /// </summary>
+    Proxy
 }
 
 /// <summary>
@@ -126,7 +149,10 @@ public static class ErrorResponseCatalog
 ///         <c>MalformedRequestFilter</c> wherever a body or query is bound, the exception
 ///         middleware's 500 everywhere, Kestrel's refusals of a request body (400, 408, 413) wherever a
 ///         body is bound, and Kestrel's own refusals of a request line or headers (400, 408, 414, 431,
-///         505, without a body) everywhere. The handler's are <see cref="ErrorResponseCatalog" />'s.
+///         505, without a body) everywhere, Kestrel's bodiless 500 when a failure escapes the exception
+///         middleware everywhere, and, from the proxy in front of the API in production, Traefik's
+///         500, 502 and 504 everywhere and its 429 on the credential routes its limited router
+///         matches, as <c>text/plain</c>. The handler's are <see cref="ErrorResponseCatalog" />'s.
 ///     </para>
 ///     <para>
 ///         One schema per response, the narrowest that every body the sources write validates
@@ -148,6 +174,8 @@ public sealed class ErrorResponseFilter : IOperationFilter
 {
     private const string TextJson = "text/json";
 
+    private const string ProxyRetryInHeader = "X-Retry-In";
+
     // Spelled out rather than read from ReasonPhrases, whose wording for a status can change between
     // releases (422 became "Unprocessable Content" in RFC 9110), so the document's text stays put.
     private static readonly Dictionary<int, string> s_reasons = new()
@@ -160,11 +188,14 @@ public sealed class ErrorResponseFilter : IOperationFilter
         [StatusCodes.Status409Conflict] = "Conflict",
         [StatusCodes.Status413PayloadTooLarge] = "Payload Too Large",
         [StatusCodes.Status414UriTooLong] = "URI Too Long",
+        [StatusCodes.Status415UnsupportedMediaType] = "Unsupported Media Type",
         [StatusCodes.Status422UnprocessableEntity] = "Unprocessable Entity",
         [StatusCodes.Status429TooManyRequests] = "Too Many Requests",
         [StatusCodes.Status431RequestHeaderFieldsTooLarge] = "Request Header Fields Too Large",
         [StatusCodes.Status500InternalServerError] = "Internal Server Error",
+        [StatusCodes.Status502BadGateway] = "Bad Gateway",
         [StatusCodes.Status503ServiceUnavailable] = "Service Unavailable",
+        [StatusCodes.Status504GatewayTimeout] = "Gateway Timeout",
         [StatusCodes.Status505HttpVersionNotsupported] = "HTTP Version Not Supported"
     };
 
@@ -185,6 +216,23 @@ public sealed class ErrorResponseFilter : IOperationFilter
     // that binds a body does: a body cut short of its Content-Length or badly chunked (400), one sent
     // below MinRequestBodyDataRate (408), one over MaxRequestBodySize (413). BodyModelBinder passes a
     // BadHttpRequestException through, so ExceptionMiddleware answers it.
+    // Traefik's router heimdall-api-<environment>-auth (yggdrasil, stacks/heimdall-api.proxy.yml) sends
+    // every request whose path matches (?i)^/api/auth/ and whose method is not GET, HEAD or OPTIONS
+    // through the ratelimit middleware heimdall-api-<environment>-auth-limit: 10 a minute per source, a
+    // burst of 10. Over it Traefik answers 429 itself, before the API sees the request: the status text,
+    // Retry-After and X-Retry-In (serveDelayError), or "No bursty traffic allowed" without them.
+    private static readonly Regex s_proxyLimitedPath = new("^/api/auth/", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly string[] s_proxyUnlimitedMethods = ["GET", "HEAD", "OPTIONS"];
+
+    // What Traefik answers when it cannot relay a request to an instance (pkg/proxy/httputil,
+    // ComputeStatusCode): 502 for a connection refused, reset or closed, 504 for one that timed out, and
+    // 500 for any other failure. Any request can meet them.
+    private static readonly int[] s_proxyStatuses =
+    [
+        StatusCodes.Status500InternalServerError, StatusCodes.Status502BadGateway, StatusCodes.Status504GatewayTimeout
+    ];
+
     private static readonly int[] s_requestBodyStatuses =
     [
         StatusCodes.Status400BadRequest, StatusCodes.Status408RequestTimeout, StatusCodes.Status413PayloadTooLarge
@@ -297,11 +345,26 @@ public sealed class ErrorResponseFilter : IOperationFilter
             {
                 Add(status, ErrorSource.RequestBody);
             }
+
+            Add(StatusCodes.Status415UnsupportedMediaType, ErrorSource.UnsupportedContentType);
         }
 
         foreach (var status in s_serverStatuses)
         {
             Add(status, ErrorSource.Server);
+        }
+
+        Add(StatusCodes.Status500InternalServerError, ErrorSource.Escaped);
+
+        foreach (var status in s_proxyStatuses)
+        {
+            Add(status, ErrorSource.Proxy);
+        }
+
+        if (s_proxyLimitedPath.IsMatch($"/{context.ApiDescription.RelativePath}")
+            && !s_proxyUnlimitedMethods.Contains(context.ApiDescription.HttpMethod ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+        {
+            Add(StatusCodes.Status429TooManyRequests, ErrorSource.Proxy);
         }
 
         return sources;
@@ -319,8 +382,11 @@ public sealed class ErrorResponseFilter : IOperationFilter
         int status, SortedSet<ErrorSource> sources, IOpenApiSchema? envelope, OperationFilterContext context,
         bool retryAdvised)
     {
-        // Kestrel's own rejections carry no body, so they add no media type or schema of their own.
-        SortedSet<ErrorSource> bodies = [.. sources.Where(source => source is not ErrorSource.Server)];
+        // Kestrel's own answers carry no body, so they add no media type or schema of their own; the
+        // proxy's is plain text, documented beside the API's JSON.
+        SortedSet<ErrorSource> bodies =
+            [.. sources.Where(source => source is not (ErrorSource.Server or ErrorSource.UnsupportedContentType or ErrorSource.Escaped or ErrorSource.Proxy))];
+        var proxy = sources.Contains(ErrorSource.Proxy);
 
         // ExceptionMiddleware and the rate limiter write with WriteAsJsonAsync, whatever the request
         // accepts; every other source is an ObjectResult, negotiated like the action's own answer.
@@ -329,28 +395,51 @@ public sealed class ErrorResponseFilter : IOperationFilter
                 ? [MediaTypeNames.Application.Json]
                 : [MediaTypeNames.Application.Json, TextJson];
 
+        var proxyLimit = proxy && status == StatusCodes.Status429TooManyRequests;
         var retryAfter = sources.Contains(ErrorSource.RateLimit)
                          || sources.Contains(ErrorSource.PasswordHash)
+                         || proxyLimit
                          || (status == StatusCodes.Status429TooManyRequests && retryAdvised);
+
+        var headers = new Dictionary<string, IOpenApiHeader>();
+
+        if (retryAfter)
+        {
+            headers[HeaderNames.RetryAfter] = new OpenApiHeader
+            {
+                Description = "Seconds to wait before trying again.",
+                Schema = new OpenApiSchema { Type = JsonSchemaType.Integer }
+            };
+        }
+
+        if (proxyLimit)
+        {
+            headers[ProxyRetryInHeader] = new OpenApiHeader
+            {
+                Description = "Traefik's exact wait, as a Go duration such as `5.9s`, on its own 429.",
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String }
+            };
+        }
+
+        Dictionary<string, IOpenApiMediaType> content = bodies.Count == 0
+            ? []
+            : mediaTypes.ToDictionary(
+                mediaType => mediaType,
+                IOpenApiMediaType (_) => new OpenApiMediaType { Schema = Schema(bodies, envelope, context) });
+
+        if (proxy)
+        {
+            content[MediaTypeNames.Text.Plain] = new OpenApiMediaType
+            {
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String }
+            };
+        }
 
         return new OpenApiResponse
         {
             Description = $"{Reason(status)}. {string.Join(" ", sources.Select(source => Sentence(source, status)))}",
-            Headers = retryAfter
-                ? new Dictionary<string, IOpenApiHeader>
-                {
-                    [HeaderNames.RetryAfter] = new OpenApiHeader
-                    {
-                        Description = "Seconds to wait before trying again.",
-                        Schema = new OpenApiSchema { Type = JsonSchemaType.Integer }
-                    }
-                }
-                : null,
-            Content = bodies.Count == 0
-                ? null
-                : mediaTypes.ToDictionary(
-                    mediaType => mediaType,
-                    IOpenApiMediaType (_) => new OpenApiMediaType { Schema = Schema(bodies, envelope, context) })
+            Headers = headers.Count == 0 ? null : headers,
+            Content = content.Count == 0 ? null : content
         };
     }
 
@@ -382,6 +471,21 @@ public sealed class ErrorResponseFilter : IOperationFilter
 
     private static string Sentence(ErrorSource source, int status) => source switch
     {
+        ErrorSource.UnsupportedContentType =>
+            "The body's `Content-Type` is missing or is one no input formatter reads: only JSON is (`application/json`, `text/json` and `application/*+json`). MVC answers with no body.",
+        ErrorSource.Escaped =>
+            "If a failure escapes the exception middleware before an answer has started, in the middleware ahead of it or while it writes its own, Kestrel answers instead, with no body.",
+        ErrorSource.Proxy => status switch
+        {
+            StatusCodes.Status429TooManyRequests =>
+                "Traefik's limit on the credential routes in production, 10 a minute per source with a burst of 10, refused the request before it reached the API: the `text/plain` status text, with `Retry-After` and `X-Retry-In`, or `No bursty traffic allowed` without them.",
+            StatusCodes.Status502BadGateway =>
+                "Traefik, in front of the API in production, could not reach an instance, or the connection to it broke: the `text/plain` status text.",
+            StatusCodes.Status504GatewayTimeout =>
+                "Traefik, in front of the API in production, timed out connecting to an instance: the `text/plain` status text.",
+            _ =>
+                "Traefik, in front of the API in production, failed to relay the request for another reason: the `text/plain` status text."
+        },
         ErrorSource.RequestBody => status switch
         {
             StatusCodes.Status408RequestTimeout =>

@@ -367,10 +367,10 @@ public partial class OpenApiResponseContractTests
         // 500 is ExceptionMiddleware's, and 400, 408, 414, 431 and 505 Kestrel's own refusals of a
         // request line or headers, which every operation can meet.
         Assert.Equal(
-            ["200", "400", "408", "414", "431", "500", "505"],
+            ["200", "400", "408", "414", "431", "500", "502", "504", "505"],
             Statuses(operations["HealthCheck_HelloWorld"].Operation));
         Assert.Equal(
-            ["200", "400", "408", "414", "431", "500", "503", "505"],
+            ["200", "400", "408", "414", "431", "500", "502", "503", "504", "505"],
             Statuses(operations["HealthCheck_Ready"].Operation));
 
         var unavailable = operations["HealthCheck_Ready"].Operation.GetProperty("responses").GetProperty("503");
@@ -415,8 +415,13 @@ public partial class OpenApiResponseContractTests
             }
             else
             {
-                // WriteAsJsonAsync, whatever the request accepts.
-                Assert.Equal(["application/json"], MediaTypes(rejection));
+                // WriteAsJsonAsync, whatever the request accepts, beside Traefik's text where its
+                // credential router limits the operation too.
+                List<string> expected = MediaTypes(rejection).Contains("text/plain")
+                    ? ["application/json", "text/plain"]
+                    : ["application/json"];
+
+                Assert.Equal(expected, MediaTypes(rejection));
                 Assert.Equal("#/components/schemas/ObjectDataOutput", SchemaReference(rejection));
             }
 
@@ -437,21 +442,25 @@ public partial class OpenApiResponseContractTests
     }
 
     [UnitFact]
-    public void GivenPublishedDocument_WhenResponseMediaTypesRead_ThenNoneIsTextPlain()
+    public void GivenPublishedDocument_WhenResponseMediaTypesRead_ThenOnlyTraefiksTextIsTextPlain()
     {
         using var document = LoadDocument();
 
         // No action answers a bare string through MVC's formatters, and only a string is written as
-        // text/plain: every envelope asked for as text/plain is written as application/json.
+        // text/plain: every envelope asked for as text/plain is written as application/json. The one
+        // text/plain is Traefik's status text, a plain string on a response that names Traefik.
         var textPlain = Operations(document)
             .SelectMany(operation => operation.Operation.GetProperty("responses").EnumerateObject()
-                .Where(response => MediaTypes(response.Value).Contains("text/plain"))
+                .Where(response => MediaTypes(response.Value).Contains("text/plain")
+                                   && (!response.Value.GetProperty("description").GetString()!.Contains("Traefik", StringComparison.Ordinal)
+                                       || response.Value.GetProperty("content").GetProperty("text/plain").GetProperty("schema")
+                                           .GetProperty("type").GetString() != "string"))
                 .Select(response => $"{operation.Method} {operation.Route} {response.Name}"))
             .ToList();
 
         Assert.True(
             textPlain.Count == 0,
-            $"{textPlain.Count} response(s) document text/plain, which the API never sends for an envelope:"
+            $"{textPlain.Count} response(s) document text/plain other than Traefik's status text:"
             + Environment.NewLine
             + string.Join(Environment.NewLine, textPlain));
     }
@@ -654,8 +663,10 @@ public partial class OpenApiResponseContractTests
             : [];
 
     /// <summary>The one schema reference a response's media types share.</summary>
+    /// <remarks>Traefik's <c>text/plain</c> status text, beside the API's JSON, has no reference to share.</remarks>
     private static string SchemaReference(JsonElement response) =>
         response.GetProperty("content").EnumerateObject()
+            .Where(media => media.Name != "text/plain")
             .Select(media => media.Value.GetProperty("schema").GetProperty("$ref").GetString()!)
             .Distinct()
             .Single();

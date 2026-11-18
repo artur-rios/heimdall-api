@@ -107,6 +107,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     operation (78). Kestrel answers these itself with an empty body, so they are documented without content.
   - `EndpointDisabledException`, which the exception middleware would answer with its own status, is not
     documented: only `[EndpointToggle]` throws it, and no action carries one. A test now holds that.
+- The OpenAPI document now covers the last answers a client can receive, from every layer between it and the API.
+  Nothing changes on the wire.
+  - `415 Unsupported Media Type`, with no body, on every operation that takes a body (31). MVC's own
+    `UnsupportedContentTypeFilter` answers it when the body's `Content-Type` is missing or not JSON, ahead of the
+    `400` the document listed for that case.
+  - Traefik, the proxy in front of the API in production: its `429 Too Many Requests` on the 19 operations its
+    credential router limits (`POST` under `/api/auth/`, 10 a minute per source), with `Retry-After` and
+    `X-Retry-In`; and its `502 Bad Gateway`, `504 Gateway Timeout` and `500` on every operation (78), as
+    `text/plain` status text beside the API's JSON.
+  - The `500` also says that Kestrel answers it with no body when a failure escapes the exception middleware.
+  - `info.description` no longer says every endpoint answers an envelope. It explains how the error responses
+    are listed, that handler statuses are an upper bound, and which answers no operation can list: the router's
+    `404` and `405`, Traefik's own refusals, its `404` while no instance is routed and its HTTPS redirect,
+    Cloudflare's error pages, closed or reset connections, and the developer exception page.
 
 ## [6.0.0] - 2026-11-10
 

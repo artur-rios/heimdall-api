@@ -282,7 +282,8 @@ public partial class OpenApiResponseContractTests
             var response = operation.Operation.GetProperty("responses").GetProperty("500");
 
             // ExceptionMiddleware writes DataOutput<string> with an empty data, as JSON whatever is accepted.
-            Assert.Equal(["application/json"], MediaTypes(response));
+            // Beside Traefik's text/plain for its own 500.
+            Assert.Equal(["application/json", "text/plain"], MediaTypes(response));
             Assert.Equal("#/components/schemas/StringDataOutput", SchemaReference(response));
         });
     }

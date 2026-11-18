@@ -44,6 +44,35 @@ public static class SwaggerConfiguration
     private const string BearerScheme = "Bearer";
 
     /// <summary>
+    ///     What the document says of its error responses, and of the answers no operation can list:
+    ///     those that belong to no operation, come from a layer in front of the deployment, or are no
+    ///     HTTP status at all. ErrorResponseFilter documents the rest on each operation.
+    /// </summary>
+    public const string ErrorsDescription =
+        "**Errors.** Each operation lists every status that the API, its web server (Kestrel) and "
+        + "the proxy in front of it in production (Traefik) can answer for it, with the body each "
+        + "writes: the API's envelopes as JSON, `ProcessOutput` from its filters, no body from "
+        + "Kestrel's own refusals, and Traefik's status text as `text/plain`. The statuses a handler "
+        + "fails with are read from the source: every message the handler and the code it reaches "
+        + "name, looked up in the status map its action passes. That is an upper bound, since a "
+        + "message the code names is taken to be one it can fail with; measured, it adds message "
+        + "names inside a status, never a status.\n\n"
+        + "**Not listed per operation.** These answers belong to no single operation, or are no HTTP "
+        + "status at all:\n\n"
+        + "- For any path: the API's `404` for a path no operation has and `405` for a method it "
+        + "lacks, without a body; Traefik's refusals of a request it cannot parse, before it routes "
+        + "it (`400`, `431` over 1 MB of headers, `501` for a transfer coding it does not support), "
+        + "its `404 page not found` while no healthy instance is routed, such as during a deploy, "
+        + "all as `text/plain`, and its redirect of a plain-HTTP request to HTTPS (`301` or `308`).\n"
+        + "- When Cloudflare proxies the host: its own error pages (the `52x` statuses, and its "
+        + "`1xxx` errors under others), as HTML.\n"
+        + "- No status at all: a connection closed or reset (a refused request body still being "
+        + "sent, a response that failed after it started, Traefik's 60-second read timeout, "
+        + "Kestrel's keep-alive timeout) and an HTTP/2 stream reset.\n"
+        + "- In Development and Local only, where it is on: the developer exception page, a `500` "
+        + "as `text/html`. It is never on for a public host.";
+
+    /// <summary>
     ///     Serves the running API's document in <see cref="SpecVersion" />. Swashbuckle's middleware
     ///     reads its options from the container, so this is registered with <c>ConfigureSwagger</c>
     ///     rather than passed to <c>UseSwagger</c>, which Util.WebApi calls without arguments.
@@ -58,13 +87,15 @@ public static class SwaggerConfiguration
             Version = "v1",
             Description =
                 "A centralized identity management API with scope-based multi-tenancy.\n\n"
-                + "Every identifier in a path is a **PublicId** (GUID), never an internal id. Every "
-                + "endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, "
-                + "`PaginatedOutput<T>` for a listing.\n\n"
+                + "Every identifier in a path is a **PublicId** (GUID), never an internal id. A "
+                + "successful answer is one of two envelopes — `DataOutput<T>` for a single resource, "
+                + "`PaginatedOutput<T>` for a listing — except the key set itself from "
+                + "`GET /.well-known/jwks.json` and the bodiless `204` of withdrawing an invitation.\n\n"
                 + "Obtain a token from `POST /api/auth/login`, then authorize with it. A challenge "
                 + "token issued by a 2FA-gated login is not one: no endpoint accepts it as a bearer "
                 + "credential, and it is read only from the `challengeToken` body field of "
-                + "`POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.",
+                + "`POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.\n\n"
+                + ErrorsDescription,
             Contact = new OpenApiContact
             {
                 Name = "Artur Rios",
