@@ -70,16 +70,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateApplicationCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateApplicationCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -129,6 +129,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -143,6 +153,22 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -168,6 +194,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -249,7 +278,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -308,6 +337,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -317,6 +355,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -379,7 +420,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -438,6 +479,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -447,6 +497,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -519,16 +572,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateApplicationCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateApplicationCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -578,6 +631,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -592,6 +655,22 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -617,6 +696,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -668,6 +750,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -713,6 +798,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -727,6 +815,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -752,6 +846,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -805,6 +902,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -850,6 +950,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -864,6 +967,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -889,6 +998,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -962,16 +1074,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1021,6 +1133,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -1036,6 +1158,22 @@
               }
             }
           },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -1045,6 +1183,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -1096,6 +1237,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -1141,6 +1285,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -1150,6 +1303,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -1212,6 +1368,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -1257,6 +1416,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -1272,6 +1434,12 @@
               }
             }
           },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -1281,6 +1449,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -1335,16 +1506,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1364,6 +1535,29 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -1382,6 +1576,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -1391,6 +1588,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -1420,6 +1620,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -1435,6 +1638,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -1444,6 +1656,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -1538,7 +1753,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1582,6 +1797,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -1591,6 +1815,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -1645,16 +1872,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LoginCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LoginCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1674,6 +1901,29 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -1691,6 +1941,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -1724,6 +1977,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -1774,19 +2030,42 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PasswordRecoveryCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PasswordRecoveryCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
+          },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -1806,6 +2085,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -1815,6 +2097,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -1865,16 +2150,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RegisterCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RegisterCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1894,6 +2179,29 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -1911,6 +2219,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -1944,6 +2255,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -1994,19 +2308,42 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResetPasswordCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResetPasswordCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
+          },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -2025,6 +2362,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -2058,6 +2398,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -2108,16 +2451,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerifyEmailCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerifyEmailCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -2137,6 +2480,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -2151,6 +2504,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "422": {
             "description": "Unprocessable Entity. The handler refused the request with a message the operation's status map answers with this status.",
@@ -2185,6 +2551,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -2217,6 +2586,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -2247,7 +2619,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2306,6 +2678,12 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
           "429": {
             "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -2329,6 +2707,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -2338,6 +2719,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -2392,7 +2776,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2436,6 +2820,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -2450,6 +2844,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -2468,6 +2875,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -2493,6 +2903,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -2521,6 +2934,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
           },
           "401": {
             "description": "Unauthorized. The handler refused the request with a message the operation's status map answers with this status. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
@@ -2552,6 +2968,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -2561,6 +2986,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -2615,16 +3043,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -2659,6 +3087,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -2673,6 +3111,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends.",
@@ -2696,6 +3147,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -2729,6 +3183,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -2783,7 +3240,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2842,6 +3299,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -2856,6 +3323,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -2874,6 +3354,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -2907,6 +3390,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -2961,7 +3447,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2990,6 +3476,29 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -3007,6 +3516,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -3040,6 +3552,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -3090,7 +3605,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3103,6 +3618,29 @@
                 }
               }
             }
+          },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -3121,6 +3659,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -3154,6 +3695,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -3204,7 +3748,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3263,6 +3807,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -3277,6 +3831,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -3295,6 +3862,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -3328,6 +3898,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -3382,7 +3955,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3441,6 +4014,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -3455,6 +4038,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -3473,6 +4069,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -3506,6 +4105,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -3539,6 +4141,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -3569,6 +4174,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -3578,6 +4192,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -3632,16 +4249,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -3676,6 +4293,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -3690,6 +4317,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -3708,6 +4348,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -3741,6 +4384,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -3795,16 +4441,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RestrictProcessingCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RestrictProcessingCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -3839,6 +4485,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -3854,6 +4510,22 @@
               }
             }
           },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -3863,6 +4535,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -3917,16 +4592,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReapplyErasuresCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReapplyErasuresCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -3961,6 +4636,32 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -3970,6 +4671,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4024,7 +4728,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4083,6 +4787,32 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4107,6 +4837,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4166,7 +4899,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4210,6 +4943,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4219,6 +4961,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4252,6 +4997,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -4282,6 +5030,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4291,6 +5048,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4373,7 +5133,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4432,6 +5192,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4441,6 +5210,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4503,7 +5275,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4562,6 +5334,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4571,6 +5352,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4622,6 +5406,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -4667,6 +5454,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4676,6 +5472,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4729,6 +5528,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -4774,6 +5576,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -4788,6 +5593,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -4813,6 +5624,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -4846,6 +5660,18 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4855,6 +5681,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -4884,6 +5713,18 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -4908,6 +5749,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]
@@ -4958,16 +5802,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -5002,6 +5846,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -5016,6 +5870,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -5034,6 +5901,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -5067,6 +5937,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -5132,16 +6005,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -5191,6 +6064,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -5205,6 +6088,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -5223,6 +6119,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -5256,6 +6155,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -5336,7 +6238,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5395,6 +6297,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -5404,6 +6315,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -5469,16 +6383,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -5528,6 +6442,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -5542,6 +6466,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
@@ -5560,6 +6497,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -5593,6 +6533,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -5673,7 +6616,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5732,6 +6675,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -5741,6 +6693,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -5825,7 +6780,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5884,6 +6839,12 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -5902,6 +6863,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -5911,6 +6875,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -5962,6 +6929,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -6007,6 +6977,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -6022,6 +6995,12 @@
               }
             }
           },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -6031,6 +7010,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -6085,7 +7067,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6144,6 +7126,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -6159,6 +7144,12 @@
               }
             }
           },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -6168,6 +7159,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -6233,16 +7227,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -6292,6 +7286,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -6306,6 +7310,19 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status. The caller's budget for this operation is spent until the window ends.",
@@ -6329,6 +7346,9 @@
                 }
               }
             }
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -6362,6 +7382,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -6403,6 +7426,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
           },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
@@ -6449,6 +7475,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -6464,6 +7493,12 @@
               }
             }
           },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -6473,6 +7508,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -6524,7 +7562,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6583,6 +7621,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -6592,6 +7639,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -6635,6 +7685,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
           },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
@@ -6681,6 +7734,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -6695,6 +7751,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -6720,6 +7782,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -6794,7 +7859,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6853,6 +7918,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -6862,6 +7936,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -6928,7 +8005,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6972,6 +8049,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -6981,6 +8067,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7026,7 +8115,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7085,6 +8174,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -7099,6 +8191,9 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status.",
@@ -7115,6 +8210,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -7124,6 +8222,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7168,6 +8269,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -7213,6 +8317,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -7227,6 +8334,9 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
           },
           "429": {
             "description": "Too Many Requests. The handler refused the request with a message the operation's status map answers with this status.",
@@ -7243,6 +8353,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -7252,6 +8365,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7306,16 +8422,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateScopeCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateScopeCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -7350,6 +8466,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -7364,6 +8490,22 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -7389,6 +8531,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7453,7 +8598,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7497,6 +8642,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -7506,6 +8660,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7571,16 +8728,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateScopeCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateScopeCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -7630,6 +8787,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -7645,6 +8812,22 @@
               }
             }
           },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -7654,6 +8837,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7696,6 +8882,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -7741,6 +8930,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -7750,6 +8948,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7801,7 +9002,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7860,6 +9061,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -7869,6 +9079,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -7912,6 +9125,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
           },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
@@ -7958,6 +9174,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -7972,6 +9191,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -7997,6 +9222,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8062,16 +9290,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetGoogleSignInCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetGoogleSignInCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -8121,6 +9349,32 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -8130,6 +9384,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8195,16 +9452,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetSelfRegistrationCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetSelfRegistrationCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -8254,6 +9511,32 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -8263,6 +9546,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8328,16 +9614,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -8387,6 +9673,32 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -8396,6 +9708,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8457,7 +9772,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8516,6 +9831,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -8525,6 +9849,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8578,6 +9905,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -8623,6 +9953,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -8637,6 +9970,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -8662,6 +10001,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8723,7 +10065,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8782,6 +10124,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -8791,6 +10142,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8832,6 +10186,9 @@
           "204": {
             "description": "No Content"
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -8877,6 +10234,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -8886,6 +10252,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -8938,7 +10307,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8982,6 +10351,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -8991,6 +10369,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9035,6 +10416,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -9080,6 +10464,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -9089,6 +10482,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9133,6 +10529,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -9178,6 +10577,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -9187,6 +10595,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9252,16 +10663,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateScopePermissionCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateScopePermissionCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -9311,6 +10722,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -9325,6 +10746,22 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -9350,6 +10787,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9423,7 +10863,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9482,6 +10922,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -9491,6 +10940,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9553,7 +11005,7 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9612,6 +11064,15 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -9621,6 +11082,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9693,16 +11157,16 @@
             }
           },
           "400": {
-            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status.",
+            "description": "Bad Request. The request could not be bound: its body or a query value is malformed or missing. The handler refused the request with a message the operation's status map answers with this status. Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateScopePermissionCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateScopePermissionCommandOutputDataOutput"
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -9752,6 +11216,16 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -9766,6 +11240,22 @@
                 }
               }
             }
+          },
+          "413": {
+            "description": "Payload Too Large. Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -9791,6 +11281,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9842,6 +11335,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -9887,6 +11383,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -9901,6 +11400,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -9926,6 +11431,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -9979,6 +11487,9 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
           "401": {
             "description": "Unauthorized. The token is missing, malformed, expired or revoked, is a 2FA challenge token, or names an identity that no longer exists.",
             "content": {
@@ -10024,6 +11535,9 @@
               }
             }
           },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
           "409": {
             "description": "Conflict. The handler refused the request with a message the operation's status map answers with this status.",
             "content": {
@@ -10038,6 +11552,12 @@
                 }
               }
             }
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
           },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
@@ -10063,6 +11583,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [
@@ -10091,6 +11614,15 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request. Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+          },
+          "408": {
+            "description": "Request Timeout. Kestrel refused the request before the API saw it: its headers arrived too slowly. No body."
+          },
+          "414": {
+            "description": "URI Too Long. Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body."
+          },
           "429": {
             "description": "Too Many Requests. The caller's budget for this operation is spent until the window ends.",
             "headers": {
@@ -10109,6 +11641,9 @@
               }
             }
           },
+          "431": {
+            "description": "Request Header Fields Too Large. Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body."
+          },
           "500": {
             "description": "Internal Server Error. An unexpected failure: the body's `data` is an empty string.",
             "content": {
@@ -10118,6 +11653,9 @@
                 }
               }
             }
+          },
+          "505": {
+            "description": "HTTP Version Not Supported. Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body."
           }
         },
         "security": [ ]

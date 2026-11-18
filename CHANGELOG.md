@@ -94,6 +94,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     middleware writes an empty `data`.
   - The `503` of a saturated password-hash gate, with `Retry-After`, on the 15 operations whose handler derives a
     password hash.
+- The OpenAPI document now lists the requests the web server, Kestrel, refuses on the API's behalf. Nothing changes
+  on the wire.
+  - A request body Kestrel refuses while an action reads it: `413 Payload Too Large` over the maximum request body
+    size (30,000,000 bytes by default), `408 Request Timeout` below the minimum data rate, and `400 Bad Request` for
+    a body cut short or badly chunked. That is every operation that takes a body (31). The exception middleware
+    answers with `application/json` `StringDataOutput`, an empty `data` and the reason as the error. Where a 400
+    also comes from model binding or the handler, it is documented as `ObjectDataOutput`, which holds all three
+    bodies.
+  - A request line or headers Kestrel refuses before the API sees the request: `400`, `408` (headers too slow),
+    `414 URI Too Long`, `431 Request Header Fields Too Large` and `505 HTTP Version Not Supported`, on every
+    operation (78). Kestrel answers these itself with an empty body, so they are documented without content.
+  - `EndpointDisabledException`, which the exception middleware would answer with its own status, is not
+    documented: only `[EndpointToggle]` throws it, and no action carries one. A test now holds that.
 
 ## [6.0.0] - 2026-11-10
 
