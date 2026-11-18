@@ -46,11 +46,9 @@ public class KestrelRequestBodyLimitTests
             Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "local");
 
             // Given a server whose request bodies are limited to a kilobyte
-            await using var factory = new WebApplicationFactory<Program>()
-                .WithWebHostBuilder(builder => builder
-                    .UseEnvironment("Local")
-                    .ConfigureKestrel(options => options.Limits.MaxRequestBodySize = BodyLimit));
+            await using var factory = new KestrelHost();
             factory.UseKestrel(0);
+            factory.UseKestrel(options => options.Limits.MaxRequestBodySize = BodyLimit);
 
             using var client = factory.CreateClient();
             var json = JsonSerializer.Serialize(new { email = new string('a', 4 * (int)BodyLimit) + "@example.com" });
@@ -73,7 +71,7 @@ public class KestrelRequestBodyLimitTests
         }
 
         // Then
-        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, status);
+        Assert.True(status == HttpStatusCode.RequestEntityTooLarge, $"Expected 413, got {(int)status}: {body}");
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
             Environment.GetEnvironmentVariable("HEIMDALL_OPENAPI_DOCUMENT")
@@ -91,5 +89,12 @@ public class KestrelRequestBodyLimitTests
         Assert.All(envelope.RootElement.EnumerateObject(), member => Assert.Contains(member.Name, properties));
         Assert.Equal(string.Empty, envelope.RootElement.GetProperty("data").GetString());
         Assert.NotEmpty(envelope.RootElement.GetProperty("errors").EnumerateArray());
+    }
+
+    // Its own factory rather than WithWebHostBuilder's derived one, so UseKestrel configures the very
+    // factory that builds the host and the client.
+    private sealed class KestrelHost : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.UseEnvironment("Local");
     }
 }
