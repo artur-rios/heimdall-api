@@ -40,7 +40,21 @@ public enum ErrorSource
     Exception,
 
     /// <summary><c>PasswordHashSaturationFilter</c>: <c>ProcessOutput</c> and <c>Retry-After: 5</c>.</summary>
-    PasswordHash
+    PasswordHash,
+
+    /// <summary>
+    ///     Kestrel refusing the request body while the action's body binding reads it: a
+    ///     <c>BadHttpRequestException</c> that <c>ExceptionMiddleware</c> answers with its own status and
+    ///     <c>DataOutput&lt;string&gt;</c>, an empty <c>data</c> and the reason phrase as the error,
+    ///     <c>application/json</c> only.
+    /// </summary>
+    RequestBody,
+
+    /// <summary>
+    ///     Kestrel refusing the request before the API sees it, while it parses the request line and
+    ///     headers: its own response, with <c>Content-Length: 0</c> and no body.
+    /// </summary>
+    Server
 }
 
 /// <summary>
@@ -109,8 +123,10 @@ public static class ErrorResponseCatalog
 ///         <c>[AllowAnonymous]</c>, a 403 from <c>[RoleRequirement]</c>, a 403 from the
 ///         subject-rights guard on every authenticated operation that is not <c>[DataSubjectRight]</c>,
 ///         the rate limiter's 429 under <c>[EnableRateLimiting]</c>, a 400 from
-///         <c>MalformedRequestFilter</c> wherever a body or query is bound, and the exception
-///         middleware's 500 everywhere. The handler's are <see cref="ErrorResponseCatalog" />'s.
+///         <c>MalformedRequestFilter</c> wherever a body or query is bound, the exception
+///         middleware's 500 everywhere, Kestrel's refusals of a request body (400, 408, 413) wherever a
+///         body is bound, and Kestrel's own refusals of a request line or headers (400, 408, 414, 431,
+///         505, without a body) everywhere. The handler's are <see cref="ErrorResponseCatalog" />'s.
 ///     </para>
 ///     <para>
 ///         One schema per response, the narrowest that every body the sources write validates
@@ -119,7 +135,9 @@ public static class ErrorResponseCatalog
 ///         writes, with a null <c>data</c>, and a <c>ProcessOutput</c> or a <c>DataOutput&lt;object?&gt;</c>
 ///         with a null <c>data</c> validates against it as well, because <c>data</c> is nullable and
 ///         no member is required. <c>ObjectDataOutput</c> (<c>data</c> any value) for an action without
-///         an envelope of its own, and <c>StringDataOutput</c> for the exception middleware's 500.
+///         an envelope of its own, or wherever the exception middleware's empty-string <c>data</c> meets
+///         another body, and <c>StringDataOutput</c> where only the exception middleware writes. No
+///         content where only Kestrel answers, which it does with an empty body.
 ///     </para>
 ///     <para>
 ///         A response ApiExplorer already lists (a <c>[ProducesResponseType]</c> 409 or 503) is kept as
@@ -138,12 +156,39 @@ public sealed class ErrorResponseFilter : IOperationFilter
         [StatusCodes.Status401Unauthorized] = "Unauthorized",
         [StatusCodes.Status403Forbidden] = "Forbidden",
         [StatusCodes.Status404NotFound] = "Not Found",
+        [StatusCodes.Status408RequestTimeout] = "Request Timeout",
         [StatusCodes.Status409Conflict] = "Conflict",
+        [StatusCodes.Status413PayloadTooLarge] = "Payload Too Large",
+        [StatusCodes.Status414UriTooLong] = "URI Too Long",
         [StatusCodes.Status422UnprocessableEntity] = "Unprocessable Entity",
         [StatusCodes.Status429TooManyRequests] = "Too Many Requests",
+        [StatusCodes.Status431RequestHeaderFieldsTooLarge] = "Request Header Fields Too Large",
         [StatusCodes.Status500InternalServerError] = "Internal Server Error",
-        [StatusCodes.Status503ServiceUnavailable] = "Service Unavailable"
+        [StatusCodes.Status503ServiceUnavailable] = "Service Unavailable",
+        [StatusCodes.Status505HttpVersionNotsupported] = "HTTP Version Not Supported"
     };
+
+    // Kestrel's own rejections while it parses the request line and headers, before the API sees the
+    // request (KestrelBadHttpRequestException): a malformed request line or header, a missing or invalid
+    // Host, an invalid Content-Length or transfer coding (400); headers sent too slowly (408); a request
+    // line over MaxRequestLineSize (414); headers over MaxRequestHeadersTotalSize or MaxRequestHeaderCount
+    // (431); an HTTP version it does not speak (505). It answers them itself, with Content-Length: 0. Any
+    // request can meet them, so every operation lists them. 405 is left out: Kestrel answers it only for
+    // an asterisk-form or authority-form target, which no operation's path is.
+    private static readonly int[] s_serverStatuses =
+    [
+        StatusCodes.Status400BadRequest, StatusCodes.Status408RequestTimeout, StatusCodes.Status414UriTooLong,
+        StatusCodes.Status431RequestHeaderFieldsTooLarge, StatusCodes.Status505HttpVersionNotsupported
+    ];
+
+    // The rejections Kestrel throws into the API while the request body is read, which only an action
+    // that binds a body does: a body cut short of its Content-Length or badly chunked (400), one sent
+    // below MinRequestBodyDataRate (408), one over MaxRequestBodySize (413). BodyModelBinder passes a
+    // BadHttpRequestException through, so ExceptionMiddleware answers it.
+    private static readonly int[] s_requestBodyStatuses =
+    [
+        StatusCodes.Status400BadRequest, StatusCodes.Status408RequestTimeout, StatusCodes.Status413PayloadTooLarge
+    ];
 
     public void Apply(OpenApiOperation operation, OperationFilterContext context)
     {
@@ -246,6 +291,19 @@ public sealed class ErrorResponseFilter : IOperationFilter
 
         Add(StatusCodes.Status500InternalServerError, ErrorSource.Exception);
 
+        if (context.ApiDescription.ParameterDescriptions.Any(parameter => parameter.Source == BindingSource.Body))
+        {
+            foreach (var status in s_requestBodyStatuses)
+            {
+                Add(status, ErrorSource.RequestBody);
+            }
+        }
+
+        foreach (var status in s_serverStatuses)
+        {
+            Add(status, ErrorSource.Server);
+        }
+
         return sources;
     }
 
@@ -261,13 +319,15 @@ public sealed class ErrorResponseFilter : IOperationFilter
         int status, SortedSet<ErrorSource> sources, IOpenApiSchema? envelope, OperationFilterContext context,
         bool retryAdvised)
     {
-        var schema = Schema(sources, envelope, context);
+        // Kestrel's own rejections carry no body, so they add no media type or schema of their own.
+        SortedSet<ErrorSource> bodies = [.. sources.Where(source => source is not ErrorSource.Server)];
 
         // ExceptionMiddleware and the rate limiter write with WriteAsJsonAsync, whatever the request
         // accepts; every other source is an ObjectResult, negotiated like the action's own answer.
-        string[] mediaTypes = sources.All(source => source is ErrorSource.RateLimit or ErrorSource.Exception)
-            ? [MediaTypeNames.Application.Json]
-            : [MediaTypeNames.Application.Json, TextJson];
+        string[] mediaTypes =
+            bodies.All(source => source is ErrorSource.RateLimit or ErrorSource.Exception or ErrorSource.RequestBody)
+                ? [MediaTypeNames.Application.Json]
+                : [MediaTypeNames.Application.Json, TextJson];
 
         var retryAfter = sources.Contains(ErrorSource.RateLimit)
                          || sources.Contains(ErrorSource.PasswordHash)
@@ -275,7 +335,7 @@ public sealed class ErrorResponseFilter : IOperationFilter
 
         return new OpenApiResponse
         {
-            Description = $"{Reason(status)}. {string.Join(" ", sources.Select(Sentence))}",
+            Description = $"{Reason(status)}. {string.Join(" ", sources.Select(source => Sentence(source, status)))}",
             Headers = retryAfter
                 ? new Dictionary<string, IOpenApiHeader>
                 {
@@ -286,22 +346,28 @@ public sealed class ErrorResponseFilter : IOperationFilter
                     }
                 }
                 : null,
-            Content = mediaTypes.ToDictionary(
-                mediaType => mediaType,
-                IOpenApiMediaType (_) => new OpenApiMediaType { Schema = schema })
+            Content = bodies.Count == 0
+                ? null
+                : mediaTypes.ToDictionary(
+                    mediaType => mediaType,
+                    IOpenApiMediaType (_) => new OpenApiMediaType { Schema = Schema(bodies, envelope, context) })
         };
     }
 
     private static IOpenApiSchema Schema(
         SortedSet<ErrorSource> sources, IOpenApiSchema? envelope, OperationFilterContext context)
     {
+        // ExceptionMiddleware's bodies carry an empty string as data, which no envelope but
+        // StringDataOutput and ObjectDataOutput admits.
+        var text = sources.Any(source => source is ErrorSource.Exception or ErrorSource.RequestBody);
+
         var type = sources switch
         {
-            _ when sources.Contains(ErrorSource.Handler) && sources.Contains(ErrorSource.Exception) =>
-                typeof(DataOutput<object>),
+            _ when sources.Contains(ErrorSource.Handler) && text => typeof(DataOutput<object>),
             _ when sources.Contains(ErrorSource.Handler) => null,
-            _ when sources.All(source => source is ErrorSource.Exception) => typeof(DataOutput<string>),
-            _ when sources.Any(source => source is ErrorSource.Malformed or ErrorSource.RateLimit or ErrorSource.Exception) =>
+            _ when sources.All(source => source is ErrorSource.Exception or ErrorSource.RequestBody) =>
+                typeof(DataOutput<string>),
+            _ when text || sources.Any(source => source is ErrorSource.Malformed or ErrorSource.RateLimit) =>
                 typeof(DataOutput<object>),
             _ => typeof(ProcessOutput)
         };
@@ -314,8 +380,30 @@ public sealed class ErrorResponseFilter : IOperationFilter
     private static string Reason(int status) =>
         s_reasons.TryGetValue(status, out var reason) ? reason : status.ToString(CultureInfo.InvariantCulture);
 
-    private static string Sentence(ErrorSource source) => source switch
+    private static string Sentence(ErrorSource source, int status) => source switch
     {
+        ErrorSource.RequestBody => status switch
+        {
+            StatusCodes.Status408RequestTimeout =>
+                "Kestrel refused the request body as the action read it: it arrived slower than the minimum data rate (240 bytes a second by default). The body's `data` is an empty string.",
+            StatusCodes.Status413PayloadTooLarge =>
+                "Kestrel refused the request body as the action read it: it is larger than the maximum request body size (30,000,000 bytes by default). The body's `data` is an empty string.",
+            _ =>
+                "Kestrel refused the request body as the action read it: it was cut short of its Content-Length, or badly chunked. The body's `data` is an empty string."
+        },
+        ErrorSource.Server => status switch
+        {
+            StatusCodes.Status408RequestTimeout =>
+                "Kestrel refused the request before the API saw it: its headers arrived too slowly. No body.",
+            StatusCodes.Status414UriTooLong =>
+                "Kestrel refused the request before the API saw it: its request line is longer than the limit (8 KB by default). No body.",
+            StatusCodes.Status431RequestHeaderFieldsTooLarge =>
+                "Kestrel refused the request before the API saw it: its headers are larger than the limit (32 KB, or 100 headers, by default). No body.",
+            StatusCodes.Status505HttpVersionNotsupported =>
+                "Kestrel refused the request before the API saw it: it names an HTTP version Kestrel does not speak. No body.",
+            _ =>
+                "Kestrel refused the request before the API saw it: a malformed request line or header, a missing or invalid Host, or an invalid Content-Length or transfer coding. No body."
+        },
         ErrorSource.Malformed => "The request could not be bound: its body or a query value is malformed or missing.",
         ErrorSource.Handler =>
             "The handler refused the request with a message the operation's status map answers with this status.",

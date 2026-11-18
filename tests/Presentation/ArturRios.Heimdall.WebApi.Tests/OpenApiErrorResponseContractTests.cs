@@ -242,11 +242,18 @@ public partial class OpenApiResponseContractTests
 
         foreach (var (operationId, statuses) in ErrorResponseCatalog.Entries)
         {
-            var responses = operations[operationId].Operation.GetProperty("responses");
-            var envelope = EnvelopeOf(responses);
+            var operation = operations[operationId].Operation;
+            var responses = operation.GetProperty("responses");
+            var readsBody = operation.TryGetProperty("requestBody", out _);
 
             foreach (var status in statuses.Keys.Where(status => statuses[status].Any(entry => entry is not ErrorResponseCatalog.PasswordHash and not ErrorResponseCatalog.RetryAdvisor)))
             {
+                // Where Kestrel can also refuse the body with the same status, ExceptionMiddleware's
+                // empty-string data joins the handler's envelope, and only ObjectDataOutput holds both.
+                var envelope = readsBody && s_requestBodyStatuses.Contains(status)
+                    ? "#/components/schemas/ObjectDataOutput"
+                    : EnvelopeOf(responses);
+
                 if (!responses.TryGetProperty($"{status}", out var response))
                 {
                     violations.Add($"{operationId}: {status} is not documented");
