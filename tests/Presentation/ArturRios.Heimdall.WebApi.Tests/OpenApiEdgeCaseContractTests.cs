@@ -58,7 +58,7 @@ public partial class OpenApiResponseContractTests
     // TraceActivityMiddleware, ExceptionMiddleware (500 and Kestrel's body refusals, RequestBody and
     // Exception), Swagger (its own paths only), CORS (no status of its own on a real request) and
     // AuthenticationMiddleware (Authentication). Another release needs its pipeline audited again.
-    private const string AuditedUtilWebApiVersion = "6.0.0";
+    private const string AuditedUtilWebApiVersion = "6.0.2";
 
     [GeneratedRegex(@"\bapp\.(Use\w+|Map\w*|Run)\(")]
     private static partial Regex PipelineCall();
