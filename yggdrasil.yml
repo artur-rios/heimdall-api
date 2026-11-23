@@ -13,7 +13,7 @@
 
 checks:
   test:                                  # Python helper tests, restore, vulnerability scan, build, migrations, tests, coverage (ci/test.sh)
-    image: mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2
+    image: mcr.microsoft.com/dotnet/sdk:10.0.404@sha256:bef136a371963aaa46ec97882845ef6f54dec15728bb4b128b1c2a400ffbc9b4
     run: ci/test.sh
     docker: true                         # the functional suite starts PostgreSQL through Testcontainers
     credentials:
@@ -26,7 +26,7 @@ checks:
     run: ci/docker.sh
     docker: true                         # the CI engine's socket: the image is built by it
   check:                                 # the committed OpenAPI document is up to date (ci/check.sh)
-    image: mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2
+    image: mcr.microsoft.com/dotnet/sdk:10.0.404@sha256:bef136a371963aaa46ec97882845ef6f54dec15728bb4b128b1c2a400ffbc9b4
     run: ci/check.sh
     # The generator and what it reflects over. They name the generator rather than all of tools/, because the
     # load-test tool also lives there and cannot change what the published document says. error_responses.py
